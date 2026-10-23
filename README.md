@@ -2,9 +2,31 @@
 
 How much more do you ship since you started working with AI coding agents? `agent-era` is a Claude Code plugin that reads your own GitHub history through the `gh` CLI you're already logged in to, and makes a share card comparing your output before and after.
 
-![Example card: 6.8× more PRs per month with AI agents](docs/example-card.png)
+![Example card: 6.8× more PRs per month with AI agents](docs/card-default.png)
 
 It counts private repos and every org your `gh` login can see. It runs on your machine, needs no sign-up, and takes about 2–3 minutes for a heavy GitHub user.
+
+## Wait, what is this?
+
+Somewhere in your GitHub history there's a month where the bars suddenly got tall. Maybe you blame a new job, or a big launch. agent-era has a different theory: that's when you started pairing with an AI agent.
+
+So it does the archaeology for you. It digs through every PR, commit and review you can see, finds the month things took off, and draws a line there. Everything to the left is your **before era**: hand-crafted, artisanal, small-batch code. Everything to the right is your **agent era**. Then it divides one by the other and hands you a card to brag about (or quietly look at alone, we don't judge).
+
+It's honest about it, too. It doesn't count the month you're still in, it won't call a drop "more", and it never puts a repo or org name on the card, so your side project and your day job stay out of the group chat.
+
+### What you get
+
+First, a summary right in your Claude Code session. Claude reads it and tells you the headline, plus the fun facts: your best month, your streak, and how much of your code had a robot co-author.
+
+![Terminal summary from /agent-era](docs/summary.png)
+
+Then the card, ready for Slack, LinkedIn or the fridge. It borrows the colors from your terminal theme, so a Dracula user gets a Dracula card and a Solarized user gets a Solarized card:
+
+| Dracula | Solarized Light |
+| --- | --- |
+| ![Card in Dracula colors](docs/card-dracula.png) | ![Card in Solarized Light colors](docs/card-solarized-light.png) |
+
+The example numbers come from the test fixture, so yours will look different. That's the point.
 
 ## Install
 
