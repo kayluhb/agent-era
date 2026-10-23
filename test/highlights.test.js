@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  highlightText,
   peakMonth,
-  pickHighlights,
+  pickFootnotes,
+  pickTiles,
   streakAbove,
+  tileText,
 } from '../src/highlights.js';
 import { calebStats } from './fixtures/caleb-stats.js';
 
-const keys = (stats) => pickHighlights(stats).map(({ key }) => key);
+const keys = (stats) => pickTiles(stats).map(({ key }) => key);
 
 const rich = {
   ...calebStats,
@@ -22,32 +23,55 @@ const rich = {
   activeDays: { before: 18, after: 20 },
 };
 
-test('agent co-authorship leads, then the biggest wins, three at most', () => {
+test('agent co-authorship leads, then the biggest wins, six at most', () => {
   // commits 8.6×, hours to merge 6.4×, reviews 3.3×, lines 1.4×, active days 1.1×
-  assert.deepEqual(keys(rich), ['coauthoredClaude', 'commits', 'mergeHours']);
+  assert.deepEqual(keys(rich), [
+    'coauthoredClaude',
+    'commits',
+    'mergeHours',
+    'reviews',
+    'lines',
+    'bestMonth',
+  ]);
 });
 
-test('formats each highlight for the card', () => {
-  const [coauthored, , hours] = pickHighlights(rich);
+test('formats each tile for the card', () => {
+  const [coauthored, , hours, , lines, best] = pickTiles(rich);
   assert.deepEqual(coauthored, {
     key: 'coauthoredClaude',
-    label: 'of commits co-authored by Claude since Apr 2026',
+    label: 'By Claude',
     before: null,
     after: '41%',
+    note: 'of agent-era commits',
   });
   assert.deepEqual(hours, {
     key: 'mergeHours',
-    label: 'median hours to merge',
+    label: 'Hours to merge',
     before: '20',
     after: '3.1',
+    note: '6.4× faster',
   });
+  assert.equal(lines.note, '1.4× smaller PRs');
+  assert.deepEqual(best, {
+    key: 'bestMonth',
+    label: 'Best month',
+    before: null,
+    after: '628',
+    note: 'PRs in Jun 2026',
+  });
+});
+
+test('tileText reads as one line for the summary', () => {
+  const [coauthored, commits] = pickTiles(rich);
+  assert.equal(tileText(coauthored), 'By Claude 41% (of agent-era commits)');
+  assert.equal(tileText(commits), 'Commits / mo 70 → 602 (8.6× more)');
 });
 
 test('a rare agent co-author is left off', () => {
   assert.ok(!keys(rich).includes('coauthoredCursor'));
 });
 
-test('each agent past the bar gets its own highlight, biggest first', () => {
+test('each agent past the bar gets its own tile, biggest first', () => {
   const stats = {
     ...rich,
     commits: { ...rich.commits, coauthored: { Claude: 0.2, Cursor: 0.3 } },
@@ -58,18 +82,7 @@ test('each agent past the bar gets its own highlight, biggest first', () => {
   ]);
 });
 
-test('highlights that would overflow the line are skipped, not cut off', () => {
-  const stats = {
-    ...rich,
-    commits: { ...rich.commits, coauthored: { Claude: 0.4, Cursor: 0.3 } },
-  };
-  // Two long co-author highlights fill the line, so the stats after them are skipped.
-  assert.deepEqual(keys(stats), ['coauthoredClaude', 'coauthoredCursor']);
-  const chars = pickHighlights(stats).map(highlightText).join('   ·   ').length;
-  assert.ok(chars <= 116);
-});
-
-test('slower merges and fewer reviews never make the card', () => {
+test('slower merges and fewer reviews never make a tile', () => {
   const stats = {
     ...calebStats,
     commits: null,
@@ -77,25 +90,31 @@ test('slower merges and fewer reviews never make the card', () => {
     mergeHours: { before: 3, after: 20 },
     reviews: { before: 40, after: 12 },
   };
-  assert.deepEqual(keys(stats), []);
+  assert.deepEqual(keys(stats), ['bestMonth', 'streak']);
 });
 
-test('smaller PRs can make the card', () => {
-  assert.deepEqual(keys({ ...calebStats, commits: null }), ['lines']);
+test('smaller PRs can make a tile', () => {
+  assert.ok(keys({ ...calebStats, commits: null }).includes('lines'));
 });
 
-test('small changes are not highlights', () => {
+test('small changes are not tiles', () => {
   const stats = {
     ...calebStats,
     commits: { ...calebStats.commits, before: 100, after: 110 },
     lines: { beforeMedian: 100, afterMedian: 90 },
   };
-  assert.deepEqual(keys(stats), []);
+  assert.deepEqual(keys(stats), ['bestMonth', 'streak']);
 });
 
-test('a high, steady merge rate fills a spare slot', () => {
+test('a high, steady merge rate fills a spare tile', () => {
   const stats = { ...calebStats, mergeRate: { before: 0.91, after: 0.94 } };
-  assert.deepEqual(keys(stats), ['commits', 'lines', 'mergeRate']);
+  assert.deepEqual(keys(stats), [
+    'commits',
+    'lines',
+    'bestMonth',
+    'streak',
+    'mergeRate',
+  ]);
 });
 
 test('a falling or low merge rate is left off', () => {
@@ -114,7 +133,25 @@ test('stats with no before value are not compared', () => {
     lines: null,
     reviews: { before: 0, after: 30 },
   };
-  assert.deepEqual(keys(stats), []);
+  assert.ok(!keys(stats).includes('reviews'));
+});
+
+test('footnotes skip stats already on a tile', () => {
+  const stats = { ...rich, afterHours: { before: 0.1, after: 0.25 } };
+  assert.deepEqual(pickFootnotes(stats, pickTiles(stats)), [
+    'active days 18 → 20/mo',
+    'PRs opened 6pm–6am 10% → 25%',
+  ]);
+});
+
+test('footnotes leave out stats with a missing side', () => {
+  const stats = {
+    ...calebStats,
+    reviews: null,
+    activeDays: { before: null, after: 3 },
+    afterHours: { before: null, after: 0.2 },
+  };
+  assert.deepEqual(pickFootnotes(stats, []), []);
 });
 
 test('peakMonth ignores the unfinished current month', () => {

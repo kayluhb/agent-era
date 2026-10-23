@@ -4,7 +4,7 @@ How much more do you ship since you started working with AI coding agents? `agen
 
 ![Example card: 6.8× more PRs per month with AI agents](docs/card-default.png)
 
-It counts private repos and every org your `gh` login can see. It runs on your machine, needs no sign-up, and takes about 2–3 minutes for a heavy GitHub user.
+It counts private repos and every org your `gh` login can see. It runs on your machine, needs no sign-up, and takes about 3–4 minutes for a heavy GitHub user.
 
 ## Wait, what is this?
 
@@ -16,11 +16,11 @@ It's honest about it, too. It doesn't count the month you're still in, it won't 
 
 ### What you get
 
-First, a summary right in your Claude Code session. Claude reads it and tells you the headline, plus the fun facts: your best month, your streak, and how much of your code had a robot co-author.
+First, a summary right in your Claude Code session. Claude reads it and tells you the headline, plus the fun facts: your best month, your streak, how much of your code had a robot co-author, and whether your agent has you opening PRs after dinner.
 
 ![Terminal summary from /agent-era](docs/summary.png)
 
-Then the card, ready for Slack, LinkedIn or the fridge. It borrows the colors from your terminal theme, so a Dracula user gets a Dracula card and a Solarized user gets a Solarized card:
+Then the card, ready for Slack, LinkedIn or the fridge: the headline, up to six stat tiles, and a chart of your commits per month with the agent-written part of each bar lit up. It borrows the colors from your terminal theme, so a Dracula user gets a Dracula card and a Solarized user gets a Solarized card:
 
 | Dracula | Solarized Light |
 | --- | --- |
@@ -57,7 +57,7 @@ node bin/agent-era.js [--since YYYY-MM] [--out path.png] [--no-commits] [--no-li
 | `--out PATH` | Where to write the card (default `./agent-era-<login>.png`) |
 | `--no-commits` | Skip commit counts (faster) |
 | `--no-lines` | Skip the merged-PR sample: lines changed, time to merge, repos (faster) |
-| `--chart-from YYYY-MM` | Start the bar chart at this month, like `2016-01` (default: 24 months before the agent era). The numbers don't change |
+| `--chart-from YYYY-MM` | Start the bar chart at this month, like `2016-01` (default: 24 months before the agent era). The numbers don't change, but each extra month adds about 2 seconds of commit counting |
 | `--theme default` | Use the default charcoal and amber colors instead of your terminal's |
 
 ## Colors
@@ -78,7 +78,11 @@ This works for iTerm2, Ghostty, kitty and Alacritty. For other terminals, or if 
 
 **The merged-PR sample** is up to 500 merged PRs on each side of the line. **Lines changed** is the median of additions + deletions per PR, so one giant generated file or lockfile can't inflate it. **Time to merge** is the median hours from opening to merging. The summary also counts the distinct repos and languages in the sample. Those counts depend on the sample size, so they stay off the card.
 
-**Agent co-authored** is the share of your default-branch commits since the line that carry an agent's trailer: `Co-Authored-By: Claude` for Claude Code, or `cursoragent@cursor.com` for Cursor's agent. Other agents, including Gemini, aren't counted yet.
+**Agent co-authored** is the share of your default-branch commits since the line that carry an agent's trailer: `Co-Authored-By: Claude` for Claude Code, or `cursoragent@cursor.com` for Cursor's agent. Other agents, including Gemini, aren't counted yet. It's counted month by month, which is what splits the chart's bars.
+
+**The chart** shows your commits per month, from 24 months before the line (or `--chart-from`) to the last full month. Each bar since the line is split in two: the part with an agent trailer, keyed "with Claude" (or "with agents" when more than one agent shows up), and the rest, keyed "solo". The y-axis is in commits per month, and a dashed line marks where the agent era starts. With `--no-commits`, or if commit counts fail, the chart shows PRs instead, without the split.
+
+**6pm–6am** is the share of PRs in the merged-PR sample that were opened between 6pm and 6am in your computer's time zone.
 
 **Merge rate** is merged PRs ÷ opened PRs, by the month each PR was opened. Recent months read a little low because some of their PRs are still open.
 
@@ -86,15 +90,17 @@ This works for iTerm2, Ghostty, kitty and Alacritty. For other terminals, or if 
 
 ## What goes on the card
 
-Below the headline there's room for up to three stats, and agent-era picks them for you:
+The headline is your PRs per month, before → after. Next to it there are up to six tiles, which agent-era picks for you in this order:
 
-1. Each agent that co-authored at least 10% of your commits, like "64% of commits co-authored by Claude since Apr 2026".
-2. The stats that improved the most (commits, reviews, active days, lines per PR, time to merge), if they changed by at least 1.25×. Fewer reviews, fewer commits or slower merges never make the card. Lines per PR can go either way, because smaller PRs are a fine result too.
-3. Merge rate, if it's at least 80% and hasn't dropped.
+1. Each agent that co-authored at least 10% of your commits, like "By Claude 64% of agent-era commits".
+2. The stats that improved the most (commits, reviews, active days, lines per PR, time to merge), if they changed by at least 1.25×. Fewer reviews, fewer commits or slower merges never get a tile. Lines per PR can go either way, because smaller PRs are a fine result too.
+3. Your best month.
+4. Your streak: how many months in a row, up to the last full one, you've beaten your pre-agent average.
+5. Merge rate, if it's at least 80% and hasn't dropped.
 
-If a highlight won't fit on the line, it's skipped and the next one gets a chance.
+Under the chart, a footnote line gives context for what didn't get a tile: reviews given, active days, and your 6pm–6am share, before → after. Unlike the tiles, the footnote shows these even when they went down. Anything that won't fit on the line is skipped.
 
-Everything else is in the summary, including your best month and how many months in a row you've beaten your pre-agent average.
+Everything else is in the summary, including the number of repos and languages in the merged-PR sample.
 
 ## Privacy
 

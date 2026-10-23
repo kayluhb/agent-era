@@ -209,6 +209,7 @@ export async function fetchPrSample(gh, login, months, cap = 500) {
         lines: pr.additions + pr.deletions,
         hoursToMerge:
           (Date.parse(pr.mergedAt) - Date.parse(pr.createdAt)) / HOUR_MS,
+        createdAt: pr.createdAt,
         repo: pr.repository.nameWithOwner,
         language: pr.repository.primaryLanguage?.name ?? null,
       });

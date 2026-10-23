@@ -39,8 +39,10 @@ test('handles a missing multiplier', () => {
     { ...calebStats, prs: { ...calebStats.prs, before: 0, multiplier: null } },
     'x.png',
   );
-  assert.ok(!text.includes('×'));
-  assert.ok(text.includes('462 PRs/month'));
+  // The tiles on the "On the card" line still say "8.6× more"; the headline has no multiplier.
+  const [, , headline] = text.split('\n');
+  assert.ok(!headline.includes('×'));
+  assert.ok(headline.includes('462 PRs/month'));
 });
 
 test('a drop in output is not called "more"', () => {
@@ -69,6 +71,7 @@ test('lists every stat, the fun facts, and what made the card', () => {
       activeDays: { before: 18, after: 20 },
       repos: { before: 3, after: 7 },
       languages: { before: 1, after: 3 },
+      afterHours: { before: 0.1, after: 0.25 },
     },
     'x.png',
   );
@@ -81,7 +84,8 @@ test('lists every stat, the fun facts, and what made the card', () => {
     'active days: 18 → 20/month',
     'Repos in the merged-PR sample: 3 → 7; languages: 1 → 3',
     'Best month:',
-    'On the card: 41% of commits co-authored by Claude since Apr 2026 · commits/mo 70 → 602 · median hours to merge 20 → 3.1',
+    'merged PRs opened 6pm–6am (your time zone): 10% → 25%',
+    'On the card: By Claude 41% (of agent-era commits) · Commits / mo 70 → 602 (8.6× more) · Hours to merge 20 → 3.1 (6.4× faster)',
   ]) {
     assert.ok(text.includes(expected), `missing ${expected}`);
   }

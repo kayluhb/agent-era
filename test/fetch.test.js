@@ -169,6 +169,7 @@ test('fetchPrSample keeps merge time, repo and language', async () => {
   assert.deepEqual(sample, {
     lines: 2,
     hoursToMerge: 36,
+    createdAt: '2025-01-01T00:00:00Z',
     repo: 'a/b',
     language: null,
   });

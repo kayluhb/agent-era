@@ -1,5 +1,5 @@
 import { parseArgs } from 'node:util';
-import { renderCardSvg } from './card.js';
+import { chartMonths, renderCardSvg } from './card.js';
 import { beforeAfter, detectEraStart } from './era.js';
 import {
   AGENT_TRAILERS,
@@ -16,6 +16,7 @@ import {
 import {
   addMonths,
   currentMonth,
+  earlierMonth,
   lastFullMonth,
   laterMonth,
   monthEnd,
@@ -26,6 +27,9 @@ import { DEFAULT_THEME, pickTheme } from './theme.js';
 
 const MONTH_FORMAT = /^\d{4}-(0[1-9]|1[0-2])$/;
 const LINES_AFTER_MONTHS = 12;
+// Local hours counted as "6pm–6am".
+const EVENING_FROM = 18;
+const MORNING_UNTIL = 6;
 
 const USAGE = `Usage: agent-era [--since YYYY-MM] [--out path.png] [--no-commits] [--no-lines] [--theme default]
                  [--chart-from YYYY-MM]
@@ -72,6 +76,10 @@ async function optional(name, caveats, fn) {
 const sumIn = (monthly, months) =>
   months.reduce((sum, m) => sum + (monthly[m] ?? 0), 0);
 const distinct = (values) => new Set(values.filter(Boolean)).size;
+const isEvening = (createdAt) => {
+  const hour = new Date(createdAt).getHours();
+  return hour >= EVENING_FROM || hour < MORNING_UNTIL;
+};
 
 // The 12 months before the era, and the full months since.
 function windows(eraStart, now) {
@@ -85,12 +93,16 @@ async function commitStats(
   gh,
   login,
   createdAt,
-  eraStart,
+  { eraStart, chartStart },
   now,
   { sleep, progress },
 ) {
-  // Only the before/after windows feed the card; the summary table uses yearly totals.
-  const months = monthRange(addMonths(eraStart, -12), lastFullMonth(now));
+  // The before/after windows and the chart; the summary table uses yearly totals.
+  const lastFull = lastFullMonth(now);
+  const months = monthRange(
+    earlierMonth(addMonths(eraStart, -12), chartStart),
+    lastFull,
+  );
   const years = [];
   for (
     let year = Number(createdAt.slice(0, 4));
@@ -108,20 +120,37 @@ async function commitStats(
     eraStart,
     now,
   );
-  const afterTotal = sumIn(counts.monthly, windows(eraStart, now).after);
+  const eraMonths = windows(eraStart, now).after;
+  const afterTotal = sumIn(counts.monthly, eraMonths);
   const coauthored = {};
+  const coauthoredMonthly = {};
   for (const [agent, trailer] of Object.entries(AGENT_TRAILERS)) {
-    await sleep(COMMIT_SEARCH_PACE_MS);
-    const count = await fetchCoauthoredCount(
-      gh,
-      login,
-      trailer,
-      `${eraStart}-01`,
-      monthEnd(lastFullMonth(now)),
-    );
+    coauthoredMonthly[agent] = {};
+    for (const [i, month] of eraMonths.entries()) {
+      progress(
+        `Counting ${agent} co-authored commits… (${i + 1}/${eraMonths.length})`,
+      );
+      await sleep(COMMIT_SEARCH_PACE_MS);
+      coauthoredMonthly[agent][month] = await fetchCoauthoredCount(
+        gh,
+        login,
+        trailer,
+        `${month}-01`,
+        monthEnd(month),
+      );
+    }
+    const count = sumIn(coauthoredMonthly[agent], eraMonths);
     coauthored[agent] = afterTotal ? Math.min(1, count / afterTotal) : null;
   }
-  return { before, after, multiplier, yearly: counts.yearly, coauthored };
+  return {
+    before,
+    after,
+    multiplier,
+    monthly: counts.monthly,
+    yearly: counts.yearly,
+    coauthored,
+    coauthoredMonthly,
+  };
 }
 
 function describeSample(sample) {
@@ -130,6 +159,9 @@ function describeSample(sample) {
     hoursToMerge: median(sample.map((pr) => pr.hoursToMerge)),
     repos: distinct(sample.map((pr) => pr.repo)),
     languages: distinct(sample.map((pr) => pr.language)),
+    evening: sample.length
+      ? sample.filter((pr) => isEvening(pr.createdAt)).length / sample.length
+      : null,
   };
 }
 
@@ -154,6 +186,7 @@ async function sampleStats(gh, login, eraStart, now, progress) {
     mergeHours: { before: before.hoursToMerge, after: after.hoursToMerge },
     repos: { before: before.repos, after: after.repos },
     languages: { before: before.languages, after: after.languages },
+    afterHours: { before: before.evening, after: after.evening },
   };
 }
 
@@ -274,10 +307,22 @@ export async function run({
       args['no-commits']
         ? null
         : optional('commits', caveats, () =>
-            commitStats(gh, login, createdAt, era.month, now, {
-              sleep,
-              progress,
-            }),
+            commitStats(
+              gh,
+              login,
+              createdAt,
+              {
+                eraStart: era.month,
+                chartStart: chartMonths({
+                  prs,
+                  eraStart: era.month,
+                  now,
+                  chartFrom: args['chart-from'],
+                })[0],
+              },
+              now,
+              { sleep, progress },
+            ),
           ),
       graphqlLane(),
     ]);
@@ -309,6 +354,7 @@ export async function run({
       mergeHours: sample?.mergeHours ?? null,
       repos: sample?.repos ?? null,
       languages: sample?.languages ?? null,
+      afterHours: sample?.afterHours ?? null,
       mergeRate: window?.mergeRate ?? null,
       reviews: window?.reviews ?? null,
       activeDays,

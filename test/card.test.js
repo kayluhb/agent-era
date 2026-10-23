@@ -38,17 +38,22 @@ test('caps the bars at 60 months', () => {
   assert.equal(svg.match(/<rect[^>]*data-bar/g).length, 60);
 });
 
-test('secondary row shows commits and lines when present', () => {
+const tilesOf = (svg) =>
+  [...svg.matchAll(/<g data-tile="(\w+)"/g)].map(([, key]) => key);
+
+test('tiles show commits and lines when present', () => {
   const svg = renderCardSvg(calebStats);
-  assert.ok(svg.includes('commits'));
-  assert.ok(svg.includes('lines'));
-  assert.ok(svg.includes('>70<') && svg.includes('>602<'));
+  assert.ok(svg.includes('COMMITS / MO'));
+  assert.ok(svg.includes('LINES / PR'));
+  assert.ok(svg.includes('>70 → <') && svg.includes('>602<'));
+  assert.ok(svg.includes('8.6× more'));
 });
 
-test('omits the secondary row when commits and lines are missing', () => {
+test('omits the commit and lines tiles when they are missing', () => {
   const svg = renderCardSvg({ ...calebStats, commits: null, lines: null });
-  assert.ok(!svg.includes('commits'));
-  assert.ok(!svg.includes('lines'));
+  assert.ok(!svg.includes('COMMITS / MO'));
+  assert.ok(!svg.includes('LINES / PR'));
+  assert.deepEqual(tilesOf(svg), ['bestMonth', 'streak']);
 });
 
 test('without a multiplier the headline is the after rate', () => {
@@ -56,9 +61,9 @@ test('without a multiplier the headline is the after rate', () => {
     ...calebStats,
     prs: { ...calebStats.prs, before: 0, multiplier: null },
   });
-  assert.ok(!svg.includes('×'));
+  assert.doesNotMatch(svg, /font-weight="800"[^>]*>[^<]*×/);
   assert.ok(svg.includes('PRs per month with AI agents'));
-  assert.ok(svg.includes('462/mo'));
+  assert.ok(svg.includes('>462/mo<'));
 });
 
 test('formats big numbers with thousands separators', () => {
@@ -131,7 +136,7 @@ test('paints the card in the terminal theme', () => {
   );
   // The after number is in the accent; labels are halfway between background and text.
   assert.match(svg, /fill="#8ad15c"[^>]*>462</);
-  assert.match(svg, /fill="#777777"[^>]*>BEFORE</);
+  assert.match(svg, /fill="#777777"[^>]*>COMMITS \/ MO</);
 });
 
 test('draws a dot grid in the text color', () => {
@@ -166,19 +171,109 @@ test('a long chart still fits between the margins without overlapping', () => {
   assert.ok(last.x + last.width <= 1140.1);
 });
 
-test('the secondary row shows the top highlights only', () => {
+test('the tiles show the top picks, six at most', () => {
   const svg = renderCardSvg({
     ...calebStats,
     commits: { ...calebStats.commits, coauthored: { Claude: 0.41 } },
     mergeHours: { before: 20, after: 3.14 },
   });
-  assert.ok(
-    svg.includes(
-      '>41%</tspan> of commits co-authored by Claude since Apr 2026',
+  assert.deepEqual(tilesOf(svg), [
+    'coauthoredClaude',
+    'commits',
+    'mergeHours',
+    'lines',
+    'bestMonth',
+    'streak',
+  ]);
+  assert.ok(svg.includes('>41%<'));
+  assert.ok(svg.includes('of agent-era commits'));
+  assert.ok(svg.includes('6.4× faster'));
+});
+
+// Commits per month for the chart, and Claude co-authoring half of each era month.
+const months = monthRange('2024-04', '2026-09');
+const commitMonthly = Object.fromEntries(months.map((m) => [m, 100]));
+const half = Object.fromEntries(
+  months.filter((m) => m >= '2026-04').map((m) => [m, 50]),
+);
+const withCommits = (coauthoredMonthly) => ({
+  ...calebStats,
+  commits: {
+    ...calebStats.commits,
+    monthly: commitMonthly,
+    coauthored: { Claude: 0.5 },
+    coauthoredMonthly,
+  },
+});
+
+test('charts commits split by agent co-authorship', () => {
+  const svg = renderCardSvg(withCommits({ Claude: half, Cursor: {} }));
+  assert.ok(svg.includes('COMMITS OVER TIME'));
+  assert.ok(svg.includes('>WITH CLAUDE<'));
+  assert.ok(svg.includes('>SOLO<'));
+  const agentBars = [
+    ...svg.matchAll(/<rect data-agent[^>]*height="([\d.]+)"/g),
+  ];
+  assert.equal(agentBars.length, 6);
+  // Era bars are the solo color; the co-authored half is the accent, drawn over them.
+  const [era] = [
+    ...svg.matchAll(
+      /<rect data-bar data-era="true"[^>]*height="([\d.]+)"[^>]*fill="([^"]+)"/g,
     ),
+  ];
+  assert.notEqual(era[2], DEFAULT_THEME.accent);
+  assert.equal(Number(agentBars[0][1]), Number(era[1]) / 2);
+});
+
+test('more than one agent is keyed as agents', () => {
+  const svg = renderCardSvg(withCommits({ Claude: half, Cursor: half }));
+  assert.ok(svg.includes('>WITH AGENTS<'));
+});
+
+test('commits with no agent trailers are not split', () => {
+  const svg = renderCardSvg(withCommits({ Claude: {}, Cursor: {} }));
+  assert.ok(svg.includes('COMMITS OVER TIME'));
+  assert.ok(!svg.includes('data-agent'));
+  assert.ok(!svg.includes('>SOLO<'));
+});
+
+test('charts PRs when commits were skipped', () => {
+  const svg = renderCardSvg({ ...calebStats, commits: null });
+  assert.ok(svg.includes('PRS OVER TIME'));
+  assert.ok(svg.includes('>WITH AGENTS<'));
+});
+
+test('labels the y-axis in round steps', () => {
+  const ticks = [
+    ...renderCardSvg(calebStats).matchAll(/<text data-tick[^>]*>([\d,]+)</g),
+  ].map(([, n]) => n);
+  // The busiest month has 628 PRs.
+  assert.deepEqual(ticks, ['0', '200', '400', '600']);
+});
+
+test('labels where the chart starts, ends and the era begins', () => {
+  const svg = renderCardSvg(calebStats);
+  assert.ok(svg.includes('>Apr 2024<'));
+  assert.ok(svg.includes('>Sep 2026<'));
+  assert.match(svg, /fill="#f5a524">Apr 2026</);
+  assert.ok(svg.includes('data-era-line'));
+});
+
+test('footnotes the stats that missed the tiles, drops included', () => {
+  const svg = renderCardSvg({
+    ...calebStats,
+    reviews: { before: 14, after: 12 },
+    activeDays: { before: 17, after: 21 },
+    afterHours: { before: 0.12, after: 0.31 },
+  });
+  assert.match(
+    svg,
+    /data-footnote[^>]*>reviews given 14 → 12\/mo {2}· {2}active days 17 → 21\/mo {2}· {2}PRs opened 6pm–6am 12% → 31%</,
   );
-  assert.ok(svg.includes('median hours to merge'));
-  assert.ok(!svg.includes('lines/PR'));
+});
+
+test('no footnote without those stats', () => {
+  assert.ok(!renderCardSvg(calebStats).includes('data-footnote'));
 });
 
 const yearsOf = (svg) =>

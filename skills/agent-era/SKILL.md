@@ -7,15 +7,15 @@ description: Generate a before/after-AI-agents share card of the user's GitHub P
 
 Make a 1200×630 share card that compares the user's GitHub output before and after they started working with AI agents.
 
-1. Run the script with a timeout of at least 5 minutes. Pass through any `--since YYYY-MM`, `--out <path>`, `--no-commits`, `--no-lines`, `--theme default` or `--chart-from YYYY-MM` the user gave. A bare year like "2016" usually means `--chart-from 2016-01`, so confirm if unsure:
+1. Run the script with a timeout of at least 10 minutes. Pass through any `--since YYYY-MM`, `--out <path>`, `--no-commits`, `--no-lines`, `--theme default` or `--chart-from YYYY-MM` the user gave. A bare year like "2016" usually means `--chart-from 2016-01`, so confirm if unsure:
 
    ```bash
    node "${CLAUDE_PLUGIN_ROOT}/bin/agent-era.js"
    ```
 
-   It prints progress to stderr and the summary to stdout. A heavy GitHub user takes about 2–3 minutes.
+   It prints progress to stderr and the summary to stdout. A heavy GitHub user takes about 3–4 minutes, and an early `--chart-from` adds about 2 seconds per extra month.
 
-2. Tell the user the headline (for example "6.8× more PRs per month"), the before → after numbers, the detected agent-era month, and where the card was written. The summary's `On the card:` line names the stats the script picked for the card; say why each one stands out. Then pick one or two fun facts the card doesn't show, like their best month or their streak above the pre-agent average. Mention any caveats the summary lists.
+2. Tell the user the headline (for example "6.8× more PRs per month"), the before → after numbers, the detected agent-era month, and where the card was written. The summary's `On the card:` line names the tiles the script picked for the card; say why each one stands out. Then pick one or two fun facts the tiles don't show, like their share of PRs opened between 6pm and 6am, or how many repos and languages their merged PRs touched. Mention any caveats the summary lists.
 
 3. If you can display images, read the PNG and show it.
 

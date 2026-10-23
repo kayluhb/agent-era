@@ -1,25 +1,23 @@
 import { lastFullMonth, monthLabel, monthRange } from './months.js';
 
-const MAX_HIGHLIGHTS = 3;
+const MAX_TILES = 6;
 const MIN_CHANGE = 1.25;
 const MIN_COAUTHORED_SHARE = 0.1;
 const MIN_MERGE_RATE = 0.8;
 const MERGE_RATE_SLACK = 0.05;
 const MIN_STREAK = 2;
-// Characters that fit on the card's secondary line: 1080px at about 9px each, with some slack.
-const MAX_ROW_CHARS = 116;
-const SEPARATOR = '   ·   ';
 
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 export const pct = (share) => `${Math.round(share * 100)}%`;
 export const hours = (n) => (n < 10 ? n.toFixed(1) : fmt(n));
+const times = (n) => `${n.toFixed(1)}×`;
 
 // `better` says which way counts as a win. "either" is for stats where smaller is good too.
 function changeStats({ commits, reviews, activeDays, lines, mergeHours }) {
   return [
     commits && {
       key: 'commits',
-      label: 'commits/mo',
+      label: 'Commits / mo',
       before: commits.before,
       after: commits.after,
       better: 'up',
@@ -27,7 +25,7 @@ function changeStats({ commits, reviews, activeDays, lines, mergeHours }) {
     },
     reviews && {
       key: 'reviews',
-      label: 'reviews/mo',
+      label: 'Reviews / mo',
       before: reviews.before,
       after: reviews.after,
       better: 'up',
@@ -35,7 +33,7 @@ function changeStats({ commits, reviews, activeDays, lines, mergeHours }) {
     },
     activeDays && {
       key: 'activeDays',
-      label: 'active days/mo',
+      label: 'Active days / mo',
       before: activeDays.before,
       after: activeDays.after,
       better: 'up',
@@ -43,7 +41,7 @@ function changeStats({ commits, reviews, activeDays, lines, mergeHours }) {
     },
     lines && {
       key: 'lines',
-      label: 'median lines/PR',
+      label: 'Lines / PR',
       before: lines.beforeMedian,
       after: lines.afterMedian,
       better: 'either',
@@ -51,7 +49,7 @@ function changeStats({ commits, reviews, activeDays, lines, mergeHours }) {
     },
     mergeHours && {
       key: 'mergeHours',
-      label: 'median hours to merge',
+      label: 'Hours to merge',
       before: mergeHours.before,
       after: mergeHours.after,
       better: 'down',
@@ -69,62 +67,16 @@ function improvement({ before, after, better }) {
   return Math.max(up, 1 / up);
 }
 
-// A highlight with no before value leads with its value: "64% of commits …".
-export const highlightText = ({ label, before, after }) =>
-  before === null ? `${after} ${label}` : `${label} ${before} → ${after}`;
-
-// Highlights in order until the line is full, skipping any that won't fit.
-function fitRow(candidates) {
-  const row = [];
-  let chars = 0;
-  for (const highlight of candidates) {
-    if (row.length === MAX_HIGHLIGHTS) break;
-    const next = chars + (row.length ? SEPARATOR.length : 0);
-    const length = highlightText(highlight).length;
-    if (next + length > MAX_ROW_CHARS) continue;
-    row.push(highlight);
-    chars = next + length;
-  }
-  return row;
+function changeNote({ key, before, after }, score) {
+  if (key === 'mergeHours') return `${times(score)} faster`;
+  if (key === 'lines')
+    return `${times(score)} ${after < before ? 'smaller' : 'bigger'} PRs`;
+  return `${times(score)} more`;
 }
 
-// The card's secondary row: agent co-authorship first, then the biggest wins, then a healthy merge rate.
-export function pickHighlights(stats) {
-  const picks = Object.entries(stats.commits?.coauthored ?? {})
-    .filter(([, share]) => share >= MIN_COAUTHORED_SHARE)
-    .sort(([, a], [, b]) => b - a)
-    .map(([agent, share]) => ({
-      key: `coauthored${agent}`,
-      label: `of commits co-authored by ${agent} since ${monthLabel(stats.eraStart)}`,
-      before: null,
-      after: pct(share),
-    }));
-  picks.push(
-    ...changeStats(stats)
-      .map((stat) => ({ stat, score: improvement(stat) }))
-      .filter(({ score }) => score >= MIN_CHANGE)
-      .sort((a, b) => b.score - a.score)
-      .map(({ stat: { key, label, before, after, format } }) => ({
-        key,
-        label,
-        before: format(before),
-        after: format(after),
-      })),
-  );
-  const rate = stats.mergeRate;
-  if (
-    rate?.after >= MIN_MERGE_RATE &&
-    (rate.before === null || rate.after >= rate.before - MERGE_RATE_SLACK)
-  ) {
-    picks.push({
-      key: 'mergeRate',
-      label: rate.before === null ? 'of PRs merged' : 'PRs merged',
-      before: rate.before === null ? null : pct(rate.before),
-      after: pct(rate.after),
-    });
-  }
-  return fitRow(picks);
-}
+// A tile as one line of text, for the summary.
+export const tileText = ({ label, before, after, note }) =>
+  `${label} ${before === null ? after : `${before} → ${after}`} (${note})`;
 
 export function peakMonth(monthly, now) {
   const lastFull = lastFullMonth(new Date(now));
@@ -150,4 +102,86 @@ export function streakAbove(monthly, average, now) {
     streak++;
   }
   return streak >= MIN_STREAK ? streak : 0;
+}
+
+// The card's tiles: agent co-authorship, the biggest wins, best month, streak, then a healthy merge rate.
+export function pickTiles(stats) {
+  const tiles = Object.entries(stats.commits?.coauthored ?? {})
+    .filter(([, share]) => share >= MIN_COAUTHORED_SHARE)
+    .sort(([, a], [, b]) => b - a)
+    .map(([agent, share]) => ({
+      key: `coauthored${agent}`,
+      label: `By ${agent}`,
+      before: null,
+      after: pct(share),
+      note: 'of agent-era commits',
+    }));
+  tiles.push(
+    ...changeStats(stats)
+      .map((stat) => ({ stat, score: improvement(stat) }))
+      .filter(({ score }) => score >= MIN_CHANGE)
+      .sort((a, b) => b.score - a.score)
+      .map(({ stat, score }) => ({
+        key: stat.key,
+        label: stat.label,
+        before: stat.format(stat.before),
+        after: stat.format(stat.after),
+        note: changeNote(stat, score),
+      })),
+  );
+  const peak = peakMonth(stats.prs.monthly, stats.now);
+  if (peak) {
+    tiles.push({
+      key: 'bestMonth',
+      label: 'Best month',
+      before: null,
+      after: fmt(peak.count),
+      note: `PRs in ${monthLabel(peak.month)}`,
+    });
+  }
+  const streak = streakAbove(stats.prs.monthly, stats.prs.before, stats.now);
+  if (streak) {
+    tiles.push({
+      key: 'streak',
+      label: 'Streak',
+      before: null,
+      after: `${streak} mo`,
+      note: 'above pre-agent avg',
+    });
+  }
+  const rate = stats.mergeRate;
+  if (
+    rate?.after >= MIN_MERGE_RATE &&
+    (rate.before === null || rate.after >= rate.before - MERGE_RATE_SLACK)
+  ) {
+    tiles.push({
+      key: 'mergeRate',
+      label: 'PRs merged',
+      before: rate.before === null ? null : pct(rate.before),
+      after: pct(rate.after),
+      note: 'merge rate',
+    });
+  }
+  return tiles.slice(0, MAX_TILES);
+}
+
+// Context lines under the chart, for stats that didn't get a tile. Drops are shown too.
+export function pickFootnotes(stats, tiles) {
+  const onTiles = new Set(tiles.map(({ key }) => key));
+  const pair = (value) =>
+    value && value.before !== null && value.after !== null;
+  const notes = [];
+  if (!onTiles.has('reviews') && pair(stats.reviews))
+    notes.push(
+      `reviews given ${fmt(stats.reviews.before)} → ${fmt(stats.reviews.after)}/mo`,
+    );
+  if (!onTiles.has('activeDays') && pair(stats.activeDays))
+    notes.push(
+      `active days ${fmt(stats.activeDays.before)} → ${fmt(stats.activeDays.after)}/mo`,
+    );
+  if (pair(stats.afterHours))
+    notes.push(
+      `PRs opened 6pm–6am ${pct(stats.afterHours.before)} → ${pct(stats.afterHours.after)}`,
+    );
+  return notes;
 }
