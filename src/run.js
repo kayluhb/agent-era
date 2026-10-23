@@ -9,6 +9,7 @@ import {
   fetchCommitCounts,
   fetchPrMonthly,
   fetchPrSample,
+  fetchTrailerStart,
   fetchWindowCounts,
   findRestrictedOrgs,
   median,
@@ -34,7 +35,8 @@ const MORNING_UNTIL = 6;
 const USAGE = `Usage: agent-era [--since YYYY-MM] [--out path.png] [--no-commits] [--no-lines] [--theme default]
                  [--chart-from YYYY-MM]
 
-  --since YYYY-MM   Month your AI-agent era started (default: detected from your PRs)
+  --since YYYY-MM   Month your AI-agent era started (default: your first agent co-authored commits,
+                    else detected from your PRs)
   --out PATH        Where to write the card (default: ./agent-era-<login>.png)
   --no-commits      Skip commit counts (faster)
   --no-lines        Skip the PR sample: lines changed, time to merge, repos (faster)
@@ -217,6 +219,20 @@ async function activeDayStats(gh, eraStart, now, progress) {
   return { before: stats.before, after: stats.after };
 }
 
+// The month agents started signing your commits: the earliest across agents, if it's a full month.
+async function trailerEra(gh, login, now, sleep, progress) {
+  progress('Looking for agent co-authored commits…');
+  const starts = [];
+  for (const trailer of Object.values(AGENT_TRAILERS)) {
+    starts.push(await fetchTrailerStart(gh, login, trailer));
+    await sleep(COMMIT_SEARCH_PACE_MS);
+  }
+  const [first] = starts.filter(Boolean).sort();
+  return first && first <= lastFullMonth(now)
+    ? { month: first, source: 'trailers' }
+    : null;
+}
+
 // Your terminal's colors with a random accent, or the default when they can't make a readable card.
 async function cardTheme(terminalPalette, random) {
   const found = await terminalPalette();
@@ -283,11 +299,13 @@ export async function run({
       return { exitCode: 0, outputPath: null, stats: null };
     }
 
+    const caveats = [];
     const era = args.since
       ? { month: args.since, source: 'flag' }
-      : detectEraStart(prs.monthly, now);
+      : ((await optional('agent trailer search', caveats, () =>
+          trailerEra(gh, login, now, sleep, progress),
+        )) ?? detectEraStart(prs.monthly, now));
     const prStats = beforeAfter(prs.monthly, era.month, now);
-    const caveats = [];
 
     // Commits use REST search and the rest use GraphQL, so their rate limits don't collide.
     const graphqlLane = async () => ({

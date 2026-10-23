@@ -10,6 +10,7 @@ import {
 import { monthLabel } from './months.js';
 
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
+const ERA_SOURCES = { trailers: 'first agent co-authored commits' };
 
 const bothKnown = (pair) => pair && pair.before !== null && pair.after !== null;
 
@@ -129,7 +130,7 @@ export function formatSummary(stats, outputPath) {
     ...headlineLines(stats),
     ...factLines(stats),
     '',
-    `Agent era: ${monthLabel(stats.eraStart)} (${stats.eraSource}). Move it with --since YYYY-MM.`,
+    `Agent era: ${monthLabel(stats.eraStart)} (${ERA_SOURCES[stats.eraSource] ?? stats.eraSource}). Move it with --since YYYY-MM.`,
     '',
     ...yearTable(stats),
     '',
