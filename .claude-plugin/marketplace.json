@@ -1,0 +1,15 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "agent-era",
+  "description": "Before/after-AI-agents share cards from your GitHub history",
+  "owner": {
+    "name": "Caleb Brown"
+  },
+  "plugins": [
+    {
+      "name": "agent-era",
+      "source": "./",
+      "description": "Share card of your GitHub output before vs. after AI agents"
+    }
+  ]
+}

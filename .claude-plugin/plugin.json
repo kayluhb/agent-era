@@ -1,0 +1,8 @@
+{
+  "name": "agent-era",
+  "description": "Share card of your GitHub output before vs. after AI agents",
+  "version": "0.1.0",
+  "author": { "name": "Caleb Brown" },
+  "repository": "https://github.com/kayluhb/agent-era",
+  "license": "MIT"
+}
