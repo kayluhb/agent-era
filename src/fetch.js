@@ -7,6 +7,7 @@ const PAGE_SIZE = 100;
 const ORG_BLOCKED = /SAML|SSO|HTTP 403/;
 const HOUR_MS = 3_600_000;
 export const COMMIT_SEARCH_PACE_MS = 2100;
+const MIN_TRAILER_COMMITS = 3;
 // Trailers agents add to commits they help write. Search matches the quoted text anywhere in the message.
 export const AGENT_TRAILERS = {
   Claude: 'Co-Authored-By: Claude',
@@ -116,6 +117,27 @@ export async function fetchCommitCounts(
     result[kind][key] = body.total_count;
   }
   return result;
+}
+
+// The first month with at least MIN_TRAILER_COMMITS of the user's earliest commits carrying a trailer,
+// so one experiment doesn't start the era early. Null when there's no such month.
+export async function fetchTrailerStart(gh, login, trailer) {
+  const body = await gh.rest('search/commits', {
+    q: `author:${login} "${trailer}"`,
+    sort: 'committer-date',
+    order: 'asc',
+    per_page: String(PAGE_SIZE),
+  });
+  const perMonth = {};
+  for (const { commit } of body.items ?? []) {
+    const month = commit.committer.date.slice(0, 7);
+    perMonth[month] = (perMonth[month] ?? 0) + 1;
+  }
+  return (
+    Object.keys(perMonth)
+      .sort()
+      .find((month) => perMonth[month] >= MIN_TRAILER_COMMITS) ?? null
+  );
 }
 
 export async function fetchCoauthoredCount(gh, login, trailer, from, to) {

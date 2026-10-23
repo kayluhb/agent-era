@@ -10,7 +10,7 @@ It counts private repos and every org your `gh` login can see. It runs on your m
 
 Somewhere in your GitHub history there's a month where the bars suddenly got tall. Maybe you blame a new job, or a big launch. agent-era has a different theory: that's when you started pairing with an AI agent.
 
-So it does the archaeology for you. It digs through every PR, commit and review you can see, finds the month things took off, and draws a line there. Everything to the left is your **before era**: hand-crafted, artisanal, small-batch code. Everything to the right is your **agent era**. Then it divides one by the other and hands you a card to brag about (or quietly look at alone, we don't judge).
+So it does the archaeology for you. It digs through every PR, commit and review you can see, finds the month an AI agent first started co-signing your commits, and draws a line there. Everything to the left is your **before era**: hand-crafted, artisanal, small-batch code. Everything to the right is your **agent era**. Then it divides one by the other and hands you a card to brag about (or quietly look at alone, we don't judge).
 
 It's honest about it, too. It doesn't count the month you're still in, it won't call a drop "more", and it never puts a repo or org name on the card, so your side project and your day job stay out of the group chat.
 
@@ -53,7 +53,7 @@ node bin/agent-era.js [--since YYYY-MM] [--out path.png] [--no-commits] [--no-li
 
 | Flag | What it does |
 | --- | --- |
-| `--since YYYY-MM` | Set the month your agent era started, instead of detecting it |
+| `--since YYYY-MM` | Set the month your agent era started, instead of finding it from your agent-signed commits |
 | `--out PATH` | Where to write the card (default `./agent-era-<login>.png`) |
 | `--no-commits` | Skip commit counts (faster) |
 | `--no-lines` | Skip the merged-PR sample: lines changed, time to merge, repos (faster) |
@@ -68,7 +68,9 @@ This works for iTerm2, Ghostty, kitty and Alacritty. For other terminals, or if 
 
 ## How the numbers work
 
-**The agent-era line.** agent-era looks for the month where your PRs jumped: the month whose next three months average at least 2× the 12 months before it (from 2023 on, full months only). If it finds no jump, it uses February 2025, when Claude Code launched. Use `--since` if it picked the wrong month.
+**The agent-era line.** agent-era starts your agent era in the first month where at least 3 of your commits carry an agent's co-author trailer (see **Agent co-authored** below). It checks your earliest 100 trailer commits for each agent, so one early experiment doesn't move the line. If no agent ever signed your commits, or the first such month isn't over yet, it looks for the month where your PRs jumped: the month whose next three months average at least 2× the 12 months before it (from 2023 on, full months only). If it finds no jump either, it uses February 2025, when Claude Code launched.
+
+Trailers only show when an agent signed the commit. If you used agents before they started signing, or used one that doesn't sign (Copilot, chat assistants, Claude Code with `includeCoAuthoredBy` turned off), use `--since` to set the month yourself.
 
 **Where your history starts.** A few scattered early PRs, like one a year for several years, don't count as the start of your history. agent-era starts at the first month where at least 6 of the next 12 months have PRs. The year table still lists every year.
 

@@ -6,6 +6,7 @@ import {
   fetchCommitCounts,
   fetchPrMonthly,
   fetchPrSample,
+  fetchTrailerStart,
   fetchWindowCounts,
   findRestrictedOrgs,
   median,
@@ -173,6 +174,44 @@ test('fetchPrSample keeps merge time, repo and language', async () => {
     repo: 'a/b',
     language: null,
   });
+});
+
+const trailerCommits = (...dates) => ({
+  total_count: dates.length,
+  items: dates.map((date) => ({ commit: { committer: { date } } })),
+});
+
+test('fetchTrailerStart finds the first month with a few trailer commits', async () => {
+  let params;
+  const gh = {
+    rest: async (_path, p) => {
+      params = p;
+      // One early experiment in Nov 2025, then steady use from Jan 2026.
+      return trailerCommits(
+        '2025-11-03T10:00:00Z',
+        '2026-01-14T12:27:10-06:00',
+        '2026-01-15T09:00:00Z',
+        '2026-01-20T09:00:00Z',
+      );
+    },
+  };
+  assert.equal(
+    await fetchTrailerStart(gh, 'kayluhb', 'Co-Authored-By: Claude'),
+    '2026-01',
+  );
+  assert.deepEqual(params, {
+    q: 'author:kayluhb "Co-Authored-By: Claude"',
+    sort: 'committer-date',
+    order: 'asc',
+    per_page: '100',
+  });
+});
+
+test('fetchTrailerStart is null without enough trailer commits', async () => {
+  const gh = { rest: async () => trailerCommits('2026-01-14T00:00:00Z') };
+  assert.equal(await fetchTrailerStart(gh, 'kayluhb', 'x'), null);
+  const none = { rest: async () => ({ total_count: 0, items: [] }) };
+  assert.equal(await fetchTrailerStart(none, 'kayluhb', 'x'), null);
 });
 
 test('fetchCoauthoredCount searches commits for a trailer', async () => {
