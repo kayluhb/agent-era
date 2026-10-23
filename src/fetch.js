@@ -7,7 +7,11 @@ const PAGE_SIZE = 100;
 const ORG_BLOCKED = /SAML|SSO|HTTP 403/;
 const HOUR_MS = 3_600_000;
 export const COMMIT_SEARCH_PACE_MS = 2100;
-export const COAUTHOR_TRAILER = 'Co-Authored-By: Claude';
+// Trailers agents add to commits they help write. Search matches the quoted text anywhere in the message.
+export const AGENT_TRAILERS = {
+  Claude: 'Co-Authored-By: Claude',
+  Cursor: 'cursoragent@cursor.com',
+};
 
 const countQuery = (searches) =>
   `query { ${searches
@@ -114,9 +118,9 @@ export async function fetchCommitCounts(
   return result;
 }
 
-export async function fetchCoauthoredCount(gh, login, from, to) {
+export async function fetchCoauthoredCount(gh, login, trailer, from, to) {
   const body = await gh.rest('search/commits', {
-    q: `author:${login} "${COAUTHOR_TRAILER}" committer-date:${from}..${to}`,
+    q: `author:${login} "${trailer}" committer-date:${from}..${to}`,
   });
   return body.total_count;
 }

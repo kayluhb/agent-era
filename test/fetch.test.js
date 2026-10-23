@@ -174,7 +174,7 @@ test('fetchPrSample keeps merge time, repo and language', async () => {
   });
 });
 
-test('fetchCoauthoredCount searches commits for the Claude trailer', async () => {
+test('fetchCoauthoredCount searches commits for a trailer', async () => {
   let q;
   const gh = {
     rest: async (_path, params) => {
@@ -183,7 +183,13 @@ test('fetchCoauthoredCount searches commits for the Claude trailer', async () =>
     },
   };
   assert.equal(
-    await fetchCoauthoredCount(gh, 'kayluhb', '2026-04-01', '2026-09-30'),
+    await fetchCoauthoredCount(
+      gh,
+      'kayluhb',
+      'Co-Authored-By: Claude',
+      '2026-04-01',
+      '2026-09-30',
+    ),
     7,
   );
   assert.equal(

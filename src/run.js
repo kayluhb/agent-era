@@ -2,6 +2,7 @@ import { parseArgs } from 'node:util';
 import { renderCardSvg } from './card.js';
 import { beforeAfter, detectEraStart } from './era.js';
 import {
+  AGENT_TRAILERS,
   COMMIT_SEARCH_PACE_MS,
   fetchActiveDays,
   fetchCoauthoredCount,
@@ -107,21 +108,20 @@ async function commitStats(
     eraStart,
     now,
   );
-  await sleep(COMMIT_SEARCH_PACE_MS);
-  const coauthored = await fetchCoauthoredCount(
-    gh,
-    login,
-    `${eraStart}-01`,
-    monthEnd(lastFullMonth(now)),
-  );
   const afterTotal = sumIn(counts.monthly, windows(eraStart, now).after);
-  return {
-    before,
-    after,
-    multiplier,
-    yearly: counts.yearly,
-    coauthoredShare: afterTotal ? Math.min(1, coauthored / afterTotal) : null,
-  };
+  const coauthored = {};
+  for (const [agent, trailer] of Object.entries(AGENT_TRAILERS)) {
+    await sleep(COMMIT_SEARCH_PACE_MS);
+    const count = await fetchCoauthoredCount(
+      gh,
+      login,
+      trailer,
+      `${eraStart}-01`,
+      monthEnd(lastFullMonth(now)),
+    );
+    coauthored[agent] = afterTotal ? Math.min(1, count / afterTotal) : null;
+  }
+  return { before, after, multiplier, yearly: counts.yearly, coauthored };
 }
 
 function describeSample(sample) {

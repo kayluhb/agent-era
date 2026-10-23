@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { renderCardSvg } from '../src/card.js';
+import { monthRange } from '../src/months.js';
 import { DEFAULT_THEME } from '../src/theme.js';
 import { calebStats } from './fixtures/caleb-stats.js';
 
@@ -25,7 +26,10 @@ test('draws 24 pre-era bars plus the full era months', () => {
 });
 
 test('caps the bars at 60 months', () => {
-  const longHistory = { '2015-01': 5, ...calebStats.prs.monthly };
+  const longHistory = {
+    ...Object.fromEntries(monthRange('2015-01', '2015-12').map((m) => [m, 5])),
+    ...calebStats.prs.monthly,
+  };
   const svg = renderCardSvg({
     ...calebStats,
     eraStart: '2023-01',
@@ -165,11 +169,29 @@ test('a long chart still fits between the margins without overlapping', () => {
 test('the secondary row shows the top highlights only', () => {
   const svg = renderCardSvg({
     ...calebStats,
-    commits: { ...calebStats.commits, coauthoredShare: 0.41 },
+    commits: { ...calebStats.commits, coauthored: { Claude: 0.41 } },
     mergeHours: { before: 20, after: 3.14 },
   });
-  assert.ok(svg.includes('commits co-authored by Claude'));
-  assert.ok(svg.includes('>41%<'));
+  assert.ok(
+    svg.includes(
+      '>41%</tspan> of commits co-authored by Claude since Apr 2026',
+    ),
+  );
   assert.ok(svg.includes('median hours to merge'));
   assert.ok(!svg.includes('lines/PR'));
+});
+
+const yearsOf = (svg) =>
+  [...svg.matchAll(/<text data-year[^>]*>(\d{4})</g)].map(([, year]) => year);
+
+test('labels each year under the chart', () => {
+  // Apr 2024 through Sep 2026.
+  assert.deepEqual(yearsOf(renderCardSvg(calebStats)), ['2025', '2026']);
+});
+
+test('a long chart skips year labels that would crowd', () => {
+  const years = yearsOf(renderCardSvg({ ...calebStats, chartFrom: '2016-01' }));
+  assert.equal(years[0], '2016');
+  assert.ok(years.includes('2026'));
+  assert.ok(years.length >= 6 && years.length <= 11);
 });

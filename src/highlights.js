@@ -1,4 +1,4 @@
-import { lastFullMonth, monthRange } from './months.js';
+import { lastFullMonth, monthLabel, monthRange } from './months.js';
 
 const MAX_HIGHLIGHTS = 3;
 const MIN_CHANGE = 1.25;
@@ -6,6 +6,9 @@ const MIN_COAUTHORED_SHARE = 0.1;
 const MIN_MERGE_RATE = 0.8;
 const MERGE_RATE_SLACK = 0.05;
 const MIN_STREAK = 2;
+// Characters that fit on the card's secondary line: 1080px at about 9px each, with some slack.
+const MAX_ROW_CHARS = 116;
+const SEPARATOR = '   ·   ';
 
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 export const pct = (share) => `${Math.round(share * 100)}%`;
@@ -66,18 +69,36 @@ function improvement({ before, after, better }) {
   return Math.max(up, 1 / up);
 }
 
-// The card's secondary row: Claude co-authorship first, then the biggest wins, then a healthy merge rate.
+// A highlight with no before value leads with its value: "64% of commits …".
+export const highlightText = ({ label, before, after }) =>
+  before === null ? `${after} ${label}` : `${label} ${before} → ${after}`;
+
+// Highlights in order until the line is full, skipping any that won't fit.
+function fitRow(candidates) {
+  const row = [];
+  let chars = 0;
+  for (const highlight of candidates) {
+    if (row.length === MAX_HIGHLIGHTS) break;
+    const next = chars + (row.length ? SEPARATOR.length : 0);
+    const length = highlightText(highlight).length;
+    if (next + length > MAX_ROW_CHARS) continue;
+    row.push(highlight);
+    chars = next + length;
+  }
+  return row;
+}
+
+// The card's secondary row: agent co-authorship first, then the biggest wins, then a healthy merge rate.
 export function pickHighlights(stats) {
-  const picks = [];
-  const share = stats.commits?.coauthoredShare;
-  if (share >= MIN_COAUTHORED_SHARE) {
-    picks.push({
-      key: 'coauthored',
-      label: 'commits co-authored by Claude',
+  const picks = Object.entries(stats.commits?.coauthored ?? {})
+    .filter(([, share]) => share >= MIN_COAUTHORED_SHARE)
+    .sort(([, a], [, b]) => b - a)
+    .map(([agent, share]) => ({
+      key: `coauthored${agent}`,
+      label: `of commits co-authored by ${agent} since ${monthLabel(stats.eraStart)}`,
       before: null,
       after: pct(share),
-    });
-  }
+    }));
   picks.push(
     ...changeStats(stats)
       .map((stat) => ({ stat, score: improvement(stat) }))
@@ -97,12 +118,12 @@ export function pickHighlights(stats) {
   ) {
     picks.push({
       key: 'mergeRate',
-      label: 'PRs merged',
+      label: rate.before === null ? 'of PRs merged' : 'PRs merged',
       before: rate.before === null ? null : pct(rate.before),
       after: pct(rate.after),
     });
   }
-  return picks.slice(0, MAX_HIGHLIGHTS);
+  return fitRow(picks);
 }
 
 export function peakMonth(monthly, now) {

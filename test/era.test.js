@@ -88,3 +88,19 @@ test('a ramp-up right after the first active month is not detected as a jump', (
   for (const m of monthRange('2024-02', '2026-10')) rampUp[m] = 10;
   assert.equal(detectEraStart(rampUp, NOW).source, 'default');
 });
+
+test('firstActiveMonth skips a scattered early trickle', () => {
+  const monthly = {
+    '2011-03': 4,
+    '2013-06': 1,
+    '2015-02': 5,
+    ...Object.fromEntries(
+      ['04', '05', '06', '07', '08', '09'].map((m) => [`2016-${m}`, 12]),
+    ),
+  };
+  assert.equal(firstActiveMonth(monthly), '2016-04');
+});
+
+test('firstActiveMonth falls back to the first PR when activity never gets steady', () => {
+  assert.equal(firstActiveMonth({ '2020-01': 1, '2021-06': 2 }), '2020-01');
+});

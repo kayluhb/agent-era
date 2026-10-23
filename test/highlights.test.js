@@ -1,29 +1,37 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { peakMonth, pickHighlights, streakAbove } from '../src/highlights.js';
+import {
+  highlightText,
+  peakMonth,
+  pickHighlights,
+  streakAbove,
+} from '../src/highlights.js';
 import { calebStats } from './fixtures/caleb-stats.js';
 
 const keys = (stats) => pickHighlights(stats).map(({ key }) => key);
 
 const rich = {
   ...calebStats,
-  commits: { ...calebStats.commits, coauthoredShare: 0.41 },
+  commits: {
+    ...calebStats.commits,
+    coauthored: { Claude: 0.41, Cursor: 0.02 },
+  },
   mergeHours: { before: 20, after: 3.14 },
   mergeRate: { before: 0.91, after: 0.94 },
   reviews: { before: 12, after: 40 },
   activeDays: { before: 18, after: 20 },
 };
 
-test('Claude co-authorship leads, then the biggest wins, three at most', () => {
+test('agent co-authorship leads, then the biggest wins, three at most', () => {
   // commits 8.6×, hours to merge 6.4×, reviews 3.3×, lines 1.4×, active days 1.1×
-  assert.deepEqual(keys(rich), ['coauthored', 'commits', 'mergeHours']);
+  assert.deepEqual(keys(rich), ['coauthoredClaude', 'commits', 'mergeHours']);
 });
 
 test('formats each highlight for the card', () => {
   const [coauthored, , hours] = pickHighlights(rich);
   assert.deepEqual(coauthored, {
-    key: 'coauthored',
-    label: 'commits co-authored by Claude',
+    key: 'coauthoredClaude',
+    label: 'of commits co-authored by Claude since Apr 2026',
     before: null,
     after: '41%',
   });
@@ -35,12 +43,30 @@ test('formats each highlight for the card', () => {
   });
 });
 
-test('a rare Claude co-author is left off', () => {
+test('a rare agent co-author is left off', () => {
+  assert.ok(!keys(rich).includes('coauthoredCursor'));
+});
+
+test('each agent past the bar gets its own highlight, biggest first', () => {
   const stats = {
     ...rich,
-    commits: { ...rich.commits, coauthoredShare: 0.05 },
+    commits: { ...rich.commits, coauthored: { Claude: 0.2, Cursor: 0.3 } },
   };
-  assert.ok(!keys(stats).includes('coauthored'));
+  assert.deepEqual(keys(stats).slice(0, 2), [
+    'coauthoredCursor',
+    'coauthoredClaude',
+  ]);
+});
+
+test('highlights that would overflow the line are skipped, not cut off', () => {
+  const stats = {
+    ...rich,
+    commits: { ...rich.commits, coauthored: { Claude: 0.4, Cursor: 0.3 } },
+  };
+  // Two long co-author highlights fill the line, so the stats after them are skipped.
+  assert.deepEqual(keys(stats), ['coauthoredClaude', 'coauthoredCursor']);
+  const chars = pickHighlights(stats).map(highlightText).join('   ·   ').length;
+  assert.ok(chars <= 116);
 });
 
 test('slower merges and fewer reviews never make the card', () => {

@@ -1,30 +1,15 @@
 import { multiplierPhrase } from './card.js';
 import {
+  highlightText,
   hours,
   pct,
   peakMonth,
   pickHighlights,
   streakAbove,
 } from './highlights.js';
-
-const MONTH_NAMES = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
+import { monthLabel } from './months.js';
 
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
-const monthLabel = (month) =>
-  `${MONTH_NAMES[Number(month.slice(5)) - 1]} ${month.slice(0, 4)}`;
 
 const bothKnown = (pair) => pair && pair.before !== null && pair.after !== null;
 
@@ -44,10 +29,12 @@ function headlineLines(stats) {
     out.push(
       `  commits on default branches: ${fmt(commits.before)} → ${fmt(commits.after)}/month`,
     );
-  if (commits?.coauthoredShare != null)
-    out.push(
-      `  commits co-authored by Claude since the agent era: ${pct(commits.coauthoredShare)}`,
-    );
+  for (const [agent, share] of Object.entries(commits?.coauthored ?? {})) {
+    if (share !== null)
+      out.push(
+        `  commits co-authored by ${agent} since ${monthLabel(stats.eraStart)}: ${pct(share)}`,
+      );
+  }
   if (lines && lines.beforeMedian !== null && lines.afterMedian !== null) {
     out.push(
       `  median lines changed per merged PR: ${fmt(lines.beforeMedian)} → ${fmt(lines.afterMedian)}`,
@@ -90,7 +77,7 @@ function factLines(stats) {
 function cardLine(stats) {
   const picks = pickHighlights(stats);
   return picks.length
-    ? `On the card: ${picks.map(({ label }) => label).join(', ')}`
+    ? `On the card: ${picks.map(highlightText).join(' · ')}`
     : 'On the card: PRs only';
 }
 

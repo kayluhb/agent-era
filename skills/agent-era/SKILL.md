@@ -1,6 +1,6 @@
 ---
 name: agent-era
-description: Generate a before/after-AI-agents share card of the user's GitHub PRs, commits, merges, reviews and Claude co-authorship, from their authenticated gh CLI. Use when the user runs /agent-era or asks how much more they ship with AI agents.
+description: Generate a before/after-AI-agents share card of the user's GitHub PRs, commits, merges, reviews and agent co-authorship (Claude, Cursor), from their authenticated gh CLI. Use when the user runs /agent-era or asks how much more they ship with AI agents.
 ---
 
 # agent-era

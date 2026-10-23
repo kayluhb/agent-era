@@ -48,13 +48,15 @@ This works for iTerm2, Ghostty, kitty and Alacritty. For other terminals, or if 
 
 **The agent-era line.** agent-era looks for the month where your PRs jumped: the month whose next three months average at least 2× the 12 months before it (from 2023 on, full months only). If it finds no jump, it uses February 2025, when Claude Code launched. Use `--since` if it picked the wrong month.
 
+**Where your history starts.** A few scattered early PRs, like one a year for several years, don't count as the start of your history. agent-era starts at the first month where at least 6 of the next 12 months have PRs. The year table still lists every year.
+
 **The multiplier.** "Before" is your average PRs per month over the 12 full months before the line. "After" is your average over the full months since. The current month is never counted, because it isn't over yet. If you had no PRs before the line, the card shows your after rate with no multiplier.
 
 **Commits** are counted on each repo's default branch only, which is what GitHub's commit search covers. A squash-merged branch counts as one commit.
 
 **The merged-PR sample** is up to 500 merged PRs on each side of the line. **Lines changed** is the median of additions + deletions per PR, so one giant generated file or lockfile can't inflate it. **Time to merge** is the median hours from opening to merging. The summary also counts the distinct repos and languages in the sample. Those counts depend on the sample size, so they stay off the card.
 
-**Claude co-authored** is the share of your default-branch commits since the line that carry a `Co-Authored-By: Claude` trailer. Claude Code adds this trailer by default. Other agents don't, so their commits aren't counted here.
+**Agent co-authored** is the share of your default-branch commits since the line that carry an agent's trailer: `Co-Authored-By: Claude` for Claude Code, or `cursoragent@cursor.com` for Cursor's agent. Other agents, including Gemini, aren't counted yet.
 
 **Merge rate** is merged PRs ÷ opened PRs, by the month each PR was opened. Recent months read a little low because some of their PRs are still open.
 
@@ -64,9 +66,11 @@ This works for iTerm2, Ghostty, kitty and Alacritty. For other terminals, or if 
 
 Below the headline there's room for up to three stats, and agent-era picks them for you:
 
-1. Claude co-authored, if it's at least 10% of your commits.
+1. Each agent that co-authored at least 10% of your commits, like "64% of commits co-authored by Claude since Apr 2026".
 2. The stats that improved the most (commits, reviews, active days, lines per PR, time to merge), if they changed by at least 1.25×. Fewer reviews, fewer commits or slower merges never make the card. Lines per PR can go either way, because smaller PRs are a fine result too.
 3. Merge rate, if it's at least 80% and hasn't dropped.
+
+If a highlight won't fit on the line, it's skipped and the next one gets a chance.
 
 Everything else is in the summary, including your best month and how many months in a row you've beaten your pre-agent average.
 

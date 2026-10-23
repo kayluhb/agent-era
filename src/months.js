@@ -37,3 +37,21 @@ export function lastFullMonth(now) {
 
 // biome-ignore lint/complexity/useMathMinMax: compares "YYYY-MM" strings, which Math.max can't.
 export const laterMonth = (a, b) => (a > b ? a : b);
+
+const MONTH_NAMES = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+export const monthLabel = (month) =>
+  `${MONTH_NAMES[Number(month.slice(5)) - 1]} ${month.slice(0, 4)}`;

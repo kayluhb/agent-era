@@ -59,7 +59,10 @@ test('lists every stat, the fun facts, and what made the card', () => {
   const text = formatSummary(
     {
       ...calebStats,
-      commits: { ...calebStats.commits, coauthoredShare: 0.41 },
+      commits: {
+        ...calebStats.commits,
+        coauthored: { Claude: 0.41, Cursor: 0.02 },
+      },
       mergeHours: { before: 20, after: 3.14 },
       mergeRate: { before: 0.91, after: 0.94 },
       reviews: { before: 12, after: 40 },
@@ -70,14 +73,15 @@ test('lists every stat, the fun facts, and what made the card', () => {
     'x.png',
   );
   for (const expected of [
-    'commits co-authored by Claude since the agent era: 41%',
+    'commits co-authored by Claude since Apr 2026: 41%',
+    'commits co-authored by Cursor since Apr 2026: 2%',
     'median hours from open to merge: 20 → 3.1',
     'PRs merged: 91% → 94%',
     "reviews of other people's PRs: 12 → 40/month",
     'active days: 18 → 20/month',
     'Repos in the merged-PR sample: 3 → 7; languages: 1 → 3',
     'Best month:',
-    'On the card: commits co-authored by Claude, commits/mo, median hours to merge',
+    'On the card: 41% of commits co-authored by Claude since Apr 2026 · commits/mo 70 → 602 · median hours to merge 20 → 3.1',
   ]) {
     assert.ok(text.includes(expected), `missing ${expected}`);
   }

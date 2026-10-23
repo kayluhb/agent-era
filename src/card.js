@@ -11,6 +11,7 @@ const BAR_GAP = 3;
 const DENSE_BAR_GAP = 1;
 const MONTHS_BEFORE_ERA = 24;
 const MAX_BARS = 60;
+const YEAR_LABEL_GAP = 48;
 const FONT = `-apple-system, "Segoe UI", Helvetica, Arial, sans-serif`;
 const MONO = `"SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace`;
 
@@ -46,13 +47,23 @@ function bars({ prs, eraStart, now, chartFrom }, colors) {
   const gap = months.length > MAX_BARS ? DENSE_BAR_GAP : BAR_GAP;
   const width = (WIDTH - 2 * PAD - gap * (months.length - 1)) / months.length;
   const baseline = HEIGHT - PAD;
-  return months
-    .map((month, i) => {
-      const height = Math.max(2, ((prs.monthly[month] ?? 0) / max) * BAR_AREA);
-      const era = month >= eraStart;
-      return `<rect data-bar data-era="${era}" x="${(PAD + i * (width + gap)).toFixed(1)}" y="${(baseline - height).toFixed(1)}" width="${width.toFixed(1)}" height="${height.toFixed(1)}" fill="${era ? colors.accent : colors.faint}"/>`;
-    })
-    .join('');
+  const xOf = (i) => PAD + i * (width + gap);
+  const rects = months.map((month, i) => {
+    const height = Math.max(2, ((prs.monthly[month] ?? 0) / max) * BAR_AREA);
+    const era = month >= eraStart;
+    return `<rect data-bar data-era="${era}" x="${xOf(i).toFixed(1)}" y="${(baseline - height).toFixed(1)}" width="${width.toFixed(1)}" height="${height.toFixed(1)}" fill="${era ? colors.accent : colors.faint}"/>`;
+  });
+  // A label under each January, skipping years too crowded to read.
+  const labels = [];
+  let lastX = Number.NEGATIVE_INFINITY;
+  for (const [i, month] of months.entries()) {
+    if (!month.endsWith('-01') || xOf(i) - lastX < YEAR_LABEL_GAP) continue;
+    lastX = xOf(i);
+    labels.push(
+      `<text data-year x="${lastX.toFixed(1)}" y="${baseline + 24}" font-size="13" font-family='${MONO}' fill="${colors.dim}">${month.slice(0, 4)}</text>`,
+    );
+  }
+  return [...rects, ...labels].join('');
 }
 
 function headline({ prs }, colors) {
@@ -73,7 +84,7 @@ function secondaryRow(stats, colors) {
   const parts = pickHighlights(stats).map(({ label, before, after }) => {
     const bold = `<tspan fill="${colors.ink}" font-weight="700">${after}</tspan>`;
     return before === null
-      ? `${label} ${bold}`
+      ? `${bold} ${label}`
       : `${label} <tspan>${before}</tspan> → ${bold}`;
   });
   if (parts.length === 0) return '';

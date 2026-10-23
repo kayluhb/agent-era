@@ -4,17 +4,28 @@ const EARLIEST_CANDIDATE = '2023-01';
 const DEFAULT_ERA_START = '2025-02'; // Claude Code's launch
 const MIN_JUMP = 2;
 const MIN_BASELINE_MONTHS = 6;
+// Activity is sustained once at least half of the next 12 months are active.
+const SUSTAINED_WINDOW = 12;
+const SUSTAINED_ACTIVE_MONTHS = 6;
 
 const countIn = (monthly, months) =>
   months.reduce((sum, m) => sum + (monthly[m] ?? 0), 0);
 const meanIn = (monthly, months) =>
   months.length ? countIn(monthly, months) / months.length : 0;
 
+// The first month of steady activity, skipping a scattered early trickle.
+// Falls back to the first active month when activity never gets steady.
 export function firstActiveMonth(monthly) {
   const active = Object.keys(monthly)
     .filter((m) => monthly[m] > 0)
     .sort();
-  return active[0] ?? null;
+  const sustained = active.find(
+    (month) =>
+      monthRange(month, addMonths(month, SUSTAINED_WINDOW - 1)).filter(
+        (m) => monthly[m] > 0,
+      ).length >= SUSTAINED_ACTIVE_MONTHS,
+  );
+  return sustained ?? active[0] ?? null;
 }
 
 // The 12 months before `month`, clipped so they never start before the first active month.

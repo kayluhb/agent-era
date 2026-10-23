@@ -63,7 +63,9 @@ function fakeGh({
       if (path === 'user/orgs') return [];
       if (path === 'search/commits') {
         if (commitError) throw commitError;
-        return { total_count: params.q.includes('Co-Authored-By') ? 30 : 50 };
+        if (params.q.includes('Co-Authored-By')) return { total_count: 30 };
+        if (params.q.includes('cursoragent')) return { total_count: 3 };
+        return { total_count: 50 };
       }
       throw new Error(`unexpected ${path}`);
     },
@@ -100,8 +102,11 @@ test('happy path renders the card from detected era', async () => {
   assert.equal(result.outputPath, 'agent-era-kayluhb.png');
   assert.equal(result.stats.lines.beforeMedian, 15);
   assert.equal(result.stats.commits.after, 50);
-  // 30 co-authored of 50 commits a month over the 6 era months.
-  assert.equal(result.stats.commits.coauthoredShare, 0.1);
+  // Of 50 commits a month over the 6 era months: 30 by Claude, 3 by Cursor.
+  assert.deepEqual(result.stats.commits.coauthored, {
+    Claude: 0.1,
+    Cursor: 0.01,
+  });
   assert.deepEqual(result.stats.mergeHours, { before: 6, after: 6 });
   assert.deepEqual(result.stats.mergeRate, { before: 1, after: 1 });
   // One active day, first seen in May, so averaged over May–Sep.
@@ -216,8 +221,8 @@ test('fetches commit months only for the before/after windows', async () => {
   };
   const { options } = harness({ gh });
   await run(options);
-  // years 2022–2026 (5) + months 2025-04 … 2026-09 (18) + co-authored (1)
-  assert.equal(queries.length, 24);
+  // years 2022–2026 (5) + months 2025-04 … 2026-09 (18) + one per agent (2)
+  assert.equal(queries.length, 25);
   assert.ok(!queries.some((q) => q.includes('2025-03-01..')));
 });
 
