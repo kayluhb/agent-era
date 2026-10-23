@@ -1,12 +1,15 @@
+import { median } from './fetch.js';
 import { addMonths, lastFullMonth, laterMonth, monthRange } from './months.js';
 
 const EARLIEST_CANDIDATE = '2023-01';
 const DEFAULT_ERA_START = '2025-02'; // Claude Code's launch
 const MIN_JUMP = 2;
 const MIN_BASELINE_MONTHS = 6;
-// Activity is sustained once at least half of the next 12 months are active.
+// Activity is sustained once at least half of the next 12 months are busy,
+// where busy means at least a tenth of a typical active month.
 const SUSTAINED_WINDOW = 12;
 const SUSTAINED_ACTIVE_MONTHS = 6;
+const BUSY_SHARE_OF_MEDIAN = 0.1;
 
 const countIn = (monthly, months) =>
   months.reduce((sum, m) => sum + (monthly[m] ?? 0), 0);
@@ -19,11 +22,13 @@ export function firstActiveMonth(monthly) {
   const active = Object.keys(monthly)
     .filter((m) => monthly[m] > 0)
     .sort();
+  const busy = BUSY_SHARE_OF_MEDIAN * median(active.map((m) => monthly[m]));
+  const isBusy = (m) => monthly[m] > 0 && monthly[m] >= busy;
   const sustained = active.find(
     (month) =>
-      monthRange(month, addMonths(month, SUSTAINED_WINDOW - 1)).filter(
-        (m) => monthly[m] > 0,
-      ).length >= SUSTAINED_ACTIVE_MONTHS,
+      isBusy(month) &&
+      monthRange(month, addMonths(month, SUSTAINED_WINDOW - 1)).filter(isBusy)
+        .length >= SUSTAINED_ACTIVE_MONTHS,
   );
   return sustained ?? active[0] ?? null;
 }

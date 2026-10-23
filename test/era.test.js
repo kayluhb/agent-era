@@ -104,3 +104,35 @@ test('firstActiveMonth skips a scattered early trickle', () => {
 test('firstActiveMonth falls back to the first PR when activity never gets steady', () => {
   assert.equal(firstActiveMonth({ '2020-01': 1, '2021-06': 2 }), '2020-01');
 });
+
+test('firstActiveMonth skips months that are tiny next to a typical month', () => {
+  // A PR or two most months, then a real ramp: the trickle isn't the start.
+  const monthly = {
+    '2015-11': 1,
+    '2016-02': 1,
+    '2016-03': 1,
+    '2016-07': 2,
+    '2016-08': 2,
+    '2016-09': 8,
+    '2016-10': 28,
+    '2016-11': 67,
+    '2016-12': 36,
+    '2017-01': 40,
+    '2017-02': 45,
+    '2017-03': 38,
+    ...Object.fromEntries(monthRange('2017-04', '2018-12').map((m) => [m, 40])),
+  };
+  assert.equal(firstActiveMonth(monthly), '2016-09');
+});
+
+test('a light but steady user starts at their first PR', () => {
+  const monthly = {
+    '2020-01': 1,
+    '2020-02': 2,
+    '2020-03': 1,
+    '2020-05': 1,
+    '2020-06': 3,
+    '2020-08': 1,
+  };
+  assert.equal(firstActiveMonth(monthly), '2020-01');
+});
