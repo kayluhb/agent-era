@@ -38,6 +38,9 @@ export function lastFullMonth(now) {
 // biome-ignore lint/complexity/useMathMinMax: compares "YYYY-MM" strings, which Math.max can't.
 export const laterMonth = (a, b) => (a > b ? a : b);
 
+// biome-ignore lint/complexity/useMathMinMax: compares "YYYY-MM" strings, which Math.min can't.
+export const earlierMonth = (a, b) => (a < b ? a : b);
+
 const MONTH_NAMES = [
   'Jan',
   'Feb',

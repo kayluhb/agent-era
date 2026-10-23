@@ -102,11 +102,14 @@ test('happy path renders the card from detected era', async () => {
   assert.equal(result.outputPath, 'agent-era-kayluhb.png');
   assert.equal(result.stats.lines.beforeMedian, 15);
   assert.equal(result.stats.commits.after, 50);
-  // Of 50 commits a month over the 6 era months: 30 by Claude, 3 by Cursor.
+  // Of 50 commits a month over the 6 era months: 30 a month by Claude, 3 by Cursor.
   assert.deepEqual(result.stats.commits.coauthored, {
-    Claude: 0.1,
-    Cursor: 0.01,
+    Claude: 0.6,
+    Cursor: 0.06,
   });
+  assert.equal(result.stats.commits.coauthoredMonthly.Claude['2026-04'], 30);
+  assert.equal(result.stats.commits.monthly['2024-04'], 50);
+  assert.equal(typeof result.stats.afterHours.after, 'number');
   assert.deepEqual(result.stats.mergeHours, { before: 6, after: 6 });
   assert.deepEqual(result.stats.mergeRate, { before: 1, after: 1 });
   // One active day, first seen in May, so averaged over May–Sep.
@@ -211,7 +214,7 @@ test('without Chrome the SVG is written and the caveat says how to fix it', asyn
   assert.ok(result.stats.caveats.some((c) => c.includes('CHROME_PATH')));
 });
 
-test('fetches commit months only for the before/after windows', async () => {
+test('fetches commit months only for the chart and the before/after windows', async () => {
   const gh = fakeGh();
   const queries = [];
   const rest = gh.rest;
@@ -221,9 +224,9 @@ test('fetches commit months only for the before/after windows', async () => {
   };
   const { options } = harness({ gh });
   await run(options);
-  // years 2022–2026 (5) + months 2025-04 … 2026-09 (18) + one per agent (2)
-  assert.equal(queries.length, 25);
-  assert.ok(!queries.some((q) => q.includes('2025-03-01..')));
+  // years 2022–2026 (5) + chart months 2024-04 … 2026-09 (30) + 6 era months per agent (12)
+  assert.equal(queries.length, 47);
+  assert.ok(!queries.some((q) => q.includes('2024-03-01..')));
 });
 
 test('samples lines while commit counts are still running', async () => {

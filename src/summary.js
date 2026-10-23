@@ -1,11 +1,11 @@
 import { multiplierPhrase } from './card.js';
 import {
-  highlightText,
   hours,
   pct,
   peakMonth,
-  pickHighlights,
+  pickTiles,
   streakAbove,
+  tileText,
 } from './highlights.js';
 import { monthLabel } from './months.js';
 
@@ -14,8 +14,16 @@ const fmt = (n) => Math.round(n).toLocaleString('en-US');
 const bothKnown = (pair) => pair && pair.before !== null && pair.after !== null;
 
 function headlineLines(stats) {
-  const { prs, commits, lines, mergeHours, mergeRate, reviews, activeDays } =
-    stats;
+  const {
+    prs,
+    commits,
+    lines,
+    mergeHours,
+    mergeRate,
+    reviews,
+    activeDays,
+    afterHours,
+  } = stats;
   const out =
     prs.multiplier === null
       ? [
@@ -56,6 +64,10 @@ function headlineLines(stats) {
     out.push(
       `  active days: ${fmt(activeDays.before)} → ${fmt(activeDays.after)}/month`,
     );
+  if (bothKnown(afterHours))
+    out.push(
+      `  merged PRs opened 6pm–6am (your time zone): ${pct(afterHours.before)} → ${pct(afterHours.after)}`,
+    );
   return out;
 }
 
@@ -75,9 +87,9 @@ function factLines(stats) {
 }
 
 function cardLine(stats) {
-  const picks = pickHighlights(stats);
-  return picks.length
-    ? `On the card: ${picks.map(highlightText).join(' · ')}`
+  const tiles = pickTiles(stats);
+  return tiles.length
+    ? `On the card: ${tiles.map(tileText).join(' · ')}`
     : 'On the card: PRs only';
 }
 
