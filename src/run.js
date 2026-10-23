@@ -190,7 +190,7 @@ export async function run({ argv, gh, now, sleep, render, log, progress }) {
     );
     if (output.format === 'svg') {
       caveats.push(
-        'Chrome not found — wrote SVG; open it in a browser and screenshot, or set CHROME_PATH.',
+        `${output.reason ?? 'Chrome not found'} — wrote SVG; open it in a browser and screenshot, or set CHROME_PATH.`,
       );
     }
     log(formatSummary(stats, output.path));

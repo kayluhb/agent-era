@@ -1,4 +1,5 @@
-import { addMonths, lastFullMonth, monthRange } from './months.js';
+import { firstActiveMonth } from './era.js';
+import { addMonths, lastFullMonth, laterMonth, monthRange } from './months.js';
 
 const WIDTH = 1200;
 const HEIGHT = 630;
@@ -21,9 +22,16 @@ const escapeXml = (text) =>
 
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 
+// "0.6× more" would be false, so a drop reads "0.6× as many".
+export const multiplierPhrase = (multiplier) =>
+  `${multiplier < 1 ? 'as many' : 'more'} PRs per month with AI agents`;
+
 function bars({ prs, eraStart, now }) {
   const months = monthRange(
-    addMonths(eraStart, -MONTHS_BEFORE_ERA),
+    laterMonth(
+      addMonths(eraStart, -MONTHS_BEFORE_ERA),
+      firstActiveMonth(prs.monthly) ?? eraStart,
+    ),
     lastFullMonth(new Date(now)),
   ).slice(-MAX_BARS);
   const max = Math.max(1, ...months.map((m) => prs.monthly[m] ?? 0));
@@ -46,7 +54,7 @@ function headline({ prs }) {
 <text x="${PAD}" y="335" font-size="26" opacity=".9">PRs per month with AI agents</text>`;
   }
   return `<text x="${PAD}" y="290" font-size="150" font-weight="900" letter-spacing="-6">${prs.multiplier.toFixed(1)}×</text>
-<text x="${PAD}" y="335" font-size="26" opacity=".9">more PRs per month with AI agents</text>
+<text x="${PAD}" y="335" font-size="26" opacity=".9">${multiplierPhrase(prs.multiplier)}</text>
 <text x="${right - 170}" y="290" font-size="44" font-weight="800" text-anchor="end" opacity=".55">${fmt(prs.before)}</text>
 <text x="${right - 170}" y="318" font-size="15" text-anchor="end" opacity=".8" letter-spacing="1.5">BEFORE</text>
 <text x="${right}" y="290" font-size="44" font-weight="800" text-anchor="end">${fmt(prs.after)}</text>

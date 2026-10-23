@@ -35,7 +35,9 @@ export function findChrome({
   return candidates.find((path) => path && exists(path)) ?? null;
 }
 
-const defaultExec = (cmd, args) => promisify(execFile)(cmd, args);
+const CHROME_TIMEOUT_MS = 30_000;
+const defaultExec = (cmd, args, options) =>
+  promisify(execFile)(cmd, args, options);
 
 export async function renderPng(svg, outPath, { chrome, exec = defaultExec }) {
   const dir = await mkdtemp(join(tmpdir(), 'agent-era-'));
@@ -45,16 +47,47 @@ export async function renderPng(svg, outPath, { chrome, exec = defaultExec }) {
       page,
       `<!doctype html><html><body style="margin:0">${svg}</body></html>`,
     );
-    await exec(chrome, [
-      '--headless=new',
-      '--disable-gpu',
-      '--hide-scrollbars',
-      '--force-device-scale-factor=1',
-      '--window-size=1200,630',
-      `--screenshot=${resolve(outPath)}`,
-      pathToFileURL(page).href,
-    ]);
+    await exec(
+      chrome,
+      [
+        '--headless=new',
+        '--disable-gpu',
+        '--hide-scrollbars',
+        '--force-device-scale-factor=1',
+        '--window-size=1200,630',
+        `--screenshot=${resolve(outPath)}`,
+        pathToFileURL(page).href,
+      ],
+      { timeout: CHROME_TIMEOUT_MS },
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+// Rendering is the last step, so a Chrome problem falls back to SVG rather than losing the run.
+export function createRenderer({
+  findChrome: find = findChrome,
+  renderPng: toPng = renderPng,
+  writeFile: write = writeFile,
+} = {}) {
+  return async (svg, pngPath) => {
+    const svgPath = `${pngPath.replace(/\.[^./\\]+$/, '')}.svg`;
+    const chrome = find();
+    if (!chrome) {
+      await write(svgPath, svg);
+      return { path: svgPath, format: 'svg', reason: 'Chrome not found' };
+    }
+    try {
+      await toPng(svg, pngPath, { chrome });
+      return { path: pngPath, format: 'png' };
+    } catch (error) {
+      await write(svgPath, svg);
+      return {
+        path: svgPath,
+        format: 'svg',
+        reason: `Chrome failed (${error.message})`,
+      };
+    }
+  };
 }

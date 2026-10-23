@@ -192,3 +192,19 @@ test('samples lines while commit counts are still running', async () => {
   await run(options);
   assert.ok(events.indexOf('lines') < events.lastIndexOf('commit'));
 });
+
+test('the SVG fallback caveat carries the renderer reason', async () => {
+  const { options } = harness({
+    render: async () => ({
+      path: 'x.svg',
+      format: 'svg',
+      reason: 'Chrome failed (boom)',
+    }),
+  });
+  const { stats } = await run(options);
+  assert.ok(
+    stats.caveats.some(
+      (c) => c.includes('Chrome failed (boom)') && c.includes('CHROME_PATH'),
+    ),
+  );
+});

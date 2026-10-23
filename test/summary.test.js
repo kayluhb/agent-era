@@ -42,3 +42,15 @@ test('handles a missing multiplier', () => {
   assert.ok(!text.includes('×'));
   assert.ok(text.includes('462 PRs/month'));
 });
+
+test('a drop in output is not called "more"', () => {
+  const text = formatSummary(
+    {
+      ...calebStats,
+      prs: { ...calebStats.prs, before: 100, after: 60, multiplier: 0.6 },
+    },
+    'x.png',
+  );
+  assert.ok(text.includes('0.6×'));
+  assert.ok(!text.includes('more PRs'));
+});

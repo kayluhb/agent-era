@@ -26,7 +26,12 @@ test('draws 24 pre-era bars plus the full era months', () => {
 });
 
 test('caps the bars at 60 months', () => {
-  const svg = renderCardSvg({ ...calebStats, eraStart: '2023-01' });
+  const longHistory = { '2015-01': 5, ...calebStats.prs.monthly };
+  const svg = renderCardSvg({
+    ...calebStats,
+    eraStart: '2023-01',
+    prs: { ...calebStats.prs, monthly: longHistory },
+  });
   assert.equal(svg.match(/<rect[^>]*data-bar/g).length, 60);
 });
 
@@ -70,4 +75,22 @@ test('escapes the login', () => {
 test('never puts org names on the card', () => {
   const svg = renderCardSvg({ ...calebStats, restrictedOrgs: ['acme-corp'] });
   assert.ok(!svg.includes('acme'));
+});
+
+test('a drop in output is not called "more"', () => {
+  const svg = renderCardSvg({
+    ...calebStats,
+    prs: { ...calebStats.prs, before: 100, after: 60, multiplier: 0.6 },
+  });
+  assert.ok(svg.includes('0.6×'));
+  assert.ok(!svg.includes('more PRs'));
+});
+
+test('bars start at the first active month for new users', () => {
+  const svg = renderCardSvg({
+    ...calebStats,
+    eraStart: '2025-02',
+    prs: { ...calebStats.prs, monthly: { '2026-08': 50, '2026-09': 50 } },
+  });
+  assert.equal(svg.match(/<rect[^>]*data-bar/g).length, 2);
 });

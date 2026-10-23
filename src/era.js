@@ -3,6 +3,7 @@ import { addMonths, lastFullMonth, laterMonth, monthRange } from './months.js';
 const EARLIEST_CANDIDATE = '2023-01';
 const DEFAULT_ERA_START = '2025-02'; // Claude Code's launch
 const MIN_JUMP = 2;
+const MIN_BASELINE_MONTHS = 6;
 
 const countIn = (monthly, months) =>
   months.reduce((sum, m) => sum + (monthly[m] ?? 0), 0);
@@ -29,10 +30,12 @@ export function detectEraStart(monthly, now) {
   let best = null;
   if (first) {
     const lastCandidate = addMonths(lastFullMonth(now), -2);
-    for (const month of monthRange(
-      laterMonth(EARLIEST_CANDIDATE, first),
-      lastCandidate,
-    )) {
+    // A baseline needs some history, or a normal ramp-up looks like a jump.
+    const firstCandidate = laterMonth(
+      EARLIEST_CANDIDATE,
+      addMonths(first, MIN_BASELINE_MONTHS),
+    );
+    for (const month of monthRange(firstCandidate, lastCandidate)) {
       const prior = priorWindow(month, first);
       const priorMean = meanIn(monthly, prior);
       if (priorMean === 0) continue;
@@ -50,7 +53,11 @@ export function detectEraStart(monthly, now) {
 export function beforeAfter(monthly, eraStart, now) {
   const first = firstActiveMonth(monthly);
   const beforeMonths = first ? priorWindow(eraStart, first) : [];
-  const afterMonths = monthRange(eraStart, lastFullMonth(now));
+  // Months before someone's first PR aren't "after" months, even past the line.
+  const afterMonths = monthRange(
+    first ? laterMonth(eraStart, first) : eraStart,
+    lastFullMonth(now),
+  );
   const before = meanIn(monthly, beforeMonths);
   const after = meanIn(monthly, afterMonths);
   return {

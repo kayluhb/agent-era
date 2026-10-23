@@ -76,3 +76,15 @@ test('firstActiveMonth finds the earliest non-zero month', () => {
   );
   assert.equal(firstActiveMonth({}), null);
 });
+
+test('a brand-new user after the default line is averaged from their first month', () => {
+  const s = beforeAfter({ '2026-08': 50, '2026-09': 50 }, '2025-02', NOW);
+  assert.equal(s.after, 50);
+  assert.equal(s.afterMonths, 2);
+});
+
+test('a ramp-up right after the first active month is not detected as a jump', () => {
+  const rampUp = { '2024-01': 2 };
+  for (const m of monthRange('2024-02', '2026-10')) rampUp[m] = 10;
+  assert.equal(detectEraStart(rampUp, NOW).source, 'default');
+});

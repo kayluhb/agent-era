@@ -1,3 +1,5 @@
+import { multiplierPhrase } from './card.js';
+
 const MONTH_NAMES = [
   'Jan',
   'Feb',
@@ -24,7 +26,7 @@ function headlineLines({ prs, commits, lines }) {
           `${fmt(prs.after)} PRs/month with AI agents (no earlier PRs to compare)`,
         ]
       : [
-          `${prs.multiplier.toFixed(1)}× more PRs per month with AI agents`,
+          `${prs.multiplier.toFixed(1)}× ${multiplierPhrase(prs.multiplier)}`,
           `  PRs: ${fmt(prs.before)} → ${fmt(prs.after)} PRs/month`,
         ];
   if (commits)
