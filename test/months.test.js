@@ -4,6 +4,7 @@ import {
   addMonths,
   currentMonth,
   lastFullMonth,
+  laterMonth,
   monthEnd,
   monthRange,
 } from '../src/months.js';
@@ -32,4 +33,9 @@ test('currentMonth and lastFullMonth use UTC', () => {
   const now = new Date('2026-11-01T00:30:00Z');
   assert.equal(currentMonth(now), '2026-11');
   assert.equal(lastFullMonth(now), '2026-10');
+});
+
+test('laterMonth picks the later of two months', () => {
+  assert.equal(laterMonth('2023-01', '2022-12'), '2023-01');
+  assert.equal(laterMonth('2022-12', '2023-01'), '2023-01');
 });

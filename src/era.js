@@ -1,11 +1,9 @@
-import { addMonths, lastFullMonth, monthRange } from './months.js';
+import { addMonths, lastFullMonth, laterMonth, monthRange } from './months.js';
 
 const EARLIEST_CANDIDATE = '2023-01';
 const DEFAULT_ERA_START = '2025-02'; // Claude Code's launch
 const MIN_JUMP = 2;
 
-// biome-ignore lint/complexity/useMathMinMax: compares "YYYY-MM" strings, which Math.max can't.
-const later = (a, b) => (a > b ? a : b);
 const countIn = (monthly, months) =>
   months.reduce((sum, m) => sum + (monthly[m] ?? 0), 0);
 const meanIn = (monthly, months) =>
@@ -20,7 +18,10 @@ export function firstActiveMonth(monthly) {
 
 // The 12 months before `month`, clipped so they never start before the first active month.
 function priorWindow(month, first) {
-  return monthRange(later(addMonths(month, -12), first), addMonths(month, -1));
+  return monthRange(
+    laterMonth(addMonths(month, -12), first),
+    addMonths(month, -1),
+  );
 }
 
 export function detectEraStart(monthly, now) {
@@ -29,7 +30,7 @@ export function detectEraStart(monthly, now) {
   if (first) {
     const lastCandidate = addMonths(lastFullMonth(now), -2);
     for (const month of monthRange(
-      later(EARLIEST_CANDIDATE, first),
+      laterMonth(EARLIEST_CANDIDATE, first),
       lastCandidate,
     )) {
       const prior = priorWindow(month, first);
