@@ -139,3 +139,37 @@ test('sets labels in a monospace font', () => {
   const svg = renderCardSvg(calebStats);
   assert.match(svg, /font-family='[^']*monospace'[^>]*>@kayluhb/);
 });
+
+const barsOf = (svg) =>
+  [
+    ...svg.matchAll(/<rect data-bar[^>]*x="([\d.]+)"[^>]*width="([\d.]+)"/g),
+  ].map(([, x, width]) => ({ x: Number(x), width: Number(width) }));
+
+test('chartFrom starts the chart at that month, past the 60-bar cap', () => {
+  const svg = renderCardSvg({ ...calebStats, chartFrom: '2016-01' });
+  // Jan 2016 through Sep 2026, the last full month.
+  assert.equal(barsOf(svg).length, 129);
+  assert.equal(svg.match(/data-era="true"/g).length, 6);
+});
+
+test('a long chart still fits between the margins without overlapping', () => {
+  const bars = barsOf(renderCardSvg({ ...calebStats, chartFrom: '2016-01' }));
+  for (const [i, bar] of bars.entries()) {
+    assert.ok(bar.width > 0, `bar ${i} has no width`);
+    if (i > 0) assert.ok(bar.x > bars[i - 1].x + bars[i - 1].width - 0.1);
+  }
+  const last = bars.at(-1);
+  assert.ok(last.x + last.width <= 1140.1);
+});
+
+test('the secondary row shows the top highlights only', () => {
+  const svg = renderCardSvg({
+    ...calebStats,
+    commits: { ...calebStats.commits, coauthoredShare: 0.41 },
+    mergeHours: { before: 20, after: 3.14 },
+  });
+  assert.ok(svg.includes('commits co-authored by Claude'));
+  assert.ok(svg.includes('>41%<'));
+  assert.ok(svg.includes('median hours to merge'));
+  assert.ok(!svg.includes('lines/PR'));
+});

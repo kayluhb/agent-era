@@ -7,6 +7,31 @@ import { calebMonthly, NOW } from './fixtures/caleb-monthly.js';
 const aliasesIn = (query) =>
   [...query.matchAll(/(\w+): search/g)].map((m) => m[1]);
 
+const samplePr = {
+  additions: 10,
+  deletions: 5,
+  createdAt: '2026-05-01T00:00:00Z',
+  mergedAt: '2026-05-01T06:00:00Z',
+  repository: { nameWithOwner: 'a/b', primaryLanguage: { name: 'Go' } },
+};
+
+const activeCalendar = {
+  viewer: {
+    c0: {
+      contributionCalendar: {
+        weeks: [
+          {
+            contributionDays: [
+              { date: '2026-05-01', contributionCount: 3 },
+              { date: '2026-05-02', contributionCount: 0 },
+            ],
+          },
+        ],
+      },
+    },
+  },
+};
+
 function fakeGh({
   monthly = calebMonthly,
   commitError = null,
@@ -23,9 +48,8 @@ function fakeGh({
     },
     createdAt: async () => '2022-06-01T00:00:00Z',
     graphql: async (query) => {
-      if (query.includes('is:merged')) {
-        return { search: { nodes: [{ additions: 10, deletions: 5 }] } };
-      }
+      if (query.includes('nodes {')) return { search: { nodes: [samplePr] } };
+      if (query.includes('contributionsCollection')) return activeCalendar;
       return Object.fromEntries(
         aliasesIn(query).map((alias) => {
           const count = alias.startsWith('y')
@@ -35,11 +59,11 @@ function fakeGh({
         }),
       );
     },
-    rest: async (path) => {
+    rest: async (path, params) => {
       if (path === 'user/orgs') return [];
       if (path === 'search/commits') {
         if (commitError) throw commitError;
-        return { total_count: 50 };
+        return { total_count: params.q.includes('Co-Authored-By') ? 30 : 50 };
       }
       throw new Error(`unexpected ${path}`);
     },
@@ -76,6 +100,12 @@ test('happy path renders the card from detected era', async () => {
   assert.equal(result.outputPath, 'agent-era-kayluhb.png');
   assert.equal(result.stats.lines.beforeMedian, 15);
   assert.equal(result.stats.commits.after, 50);
+  // 30 co-authored of 50 commits a month over the 6 era months.
+  assert.equal(result.stats.commits.coauthoredShare, 0.1);
+  assert.deepEqual(result.stats.mergeHours, { before: 6, after: 6 });
+  assert.deepEqual(result.stats.mergeRate, { before: 1, after: 1 });
+  // One active day, first seen in May, so averaged over May–Sep.
+  assert.equal(result.stats.activeDays.after, 1 / 5);
   assert.equal(renders.length, 1);
   assert.ok(logs.join('\n').includes('6.8×'));
 });
@@ -141,6 +171,22 @@ test('a rate-limited commit fetch still produces the PR card', async () => {
   assert.equal(renders.length, 1);
 });
 
+test('a failed merge and review count leaves the rest of the card', async () => {
+  const gh = fakeGh();
+  const { graphql } = gh;
+  gh.graphql = async (query) => {
+    if (query.includes('reviewed-by')) throw new Error('boom');
+    return graphql(query);
+  };
+  const { options, renders } = harness({ gh });
+  const { exitCode, stats } = await run(options);
+  assert.equal(exitCode, 0);
+  assert.equal(stats.mergeRate, null);
+  assert.equal(stats.reviews, null);
+  assert.ok(stats.caveats.some((c) => c.includes('merge and review counts')));
+  assert.equal(renders.length, 1);
+});
+
 test('--no-commits and --no-lines skip those sections', async () => {
   const { options } = harness({ argv: ['--no-commits', '--no-lines'] });
   const { stats } = await run(options);
@@ -170,8 +216,8 @@ test('fetches commit months only for the before/after windows', async () => {
   };
   const { options } = harness({ gh });
   await run(options);
-  // years 2022–2026 (5) + months 2025-04 … 2026-09 (18)
-  assert.equal(queries.length, 23);
+  // years 2022–2026 (5) + months 2025-04 … 2026-09 (18) + co-authored (1)
+  assert.equal(queries.length, 24);
   assert.ok(!queries.some((q) => q.includes('2025-03-01..')));
 });
 
@@ -187,7 +233,7 @@ test('samples lines while commit counts are still running', async () => {
     return rest(path, params);
   };
   gh.graphql = async (query) => {
-    if (query.includes('is:merged')) events.push('lines');
+    if (query.includes('nodes {')) events.push('lines');
     return graphql(query);
   };
   const { options } = harness({ gh });
@@ -269,3 +315,20 @@ test('rejects an unknown --theme', async () => {
   assert.equal(renders.length, 0);
   assert.ok(logs.join('\n').includes('--theme'));
 });
+
+test('--chart-from starts the chart at that month', async () => {
+  const { options, renders } = harness({ argv: ['--chart-from', '2016-01'] });
+  const { exitCode, stats } = await run(options);
+  assert.equal(exitCode, 0);
+  assert.equal(stats.chartFrom, '2016-01');
+  // Jan 2016 through Sep 2026.
+  assert.equal(renders[0].svg.match(/<rect data-bar/g).length, 129);
+});
+
+for (const from of ['2026-10', '2016', '2016-13']) {
+  test(`rejects --chart-from ${from}`, async () => {
+    const { options, renders } = harness({ argv: ['--chart-from', from] });
+    assert.equal((await run(options)).exitCode, 2);
+    assert.equal(renders.length, 0);
+  });
+}

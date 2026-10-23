@@ -26,7 +26,7 @@ Claude runs the script, tells you your headline number, and writes `agent-era-<y
 You can also run the script directly:
 
 ```bash
-node bin/agent-era.js [--since YYYY-MM] [--out path.png] [--no-commits] [--no-lines] [--theme default]
+node bin/agent-era.js [--since YYYY-MM] [--out path.png] [--no-commits] [--no-lines] [--theme default] [--chart-from YYYY-MM]
 ```
 
 | Flag | What it does |
@@ -34,7 +34,8 @@ node bin/agent-era.js [--since YYYY-MM] [--out path.png] [--no-commits] [--no-li
 | `--since YYYY-MM` | Set the month your agent era started, instead of detecting it |
 | `--out PATH` | Where to write the card (default `./agent-era-<login>.png`) |
 | `--no-commits` | Skip commit counts (faster) |
-| `--no-lines` | Skip the lines-changed sample (faster) |
+| `--no-lines` | Skip the merged-PR sample: lines changed, time to merge, repos (faster) |
+| `--chart-from YYYY-MM` | Start the bar chart at this month, like `2016-01` (default: 24 months before the agent era). The numbers don't change |
 | `--theme default` | Use the default charcoal and amber colors instead of your terminal's |
 
 ## Colors
@@ -51,7 +52,23 @@ This works for iTerm2, Ghostty, kitty and Alacritty. For other terminals, or if 
 
 **Commits** are counted on each repo's default branch only, which is what GitHub's commit search covers. A squash-merged branch counts as one commit.
 
-**Lines changed** is the median of additions + deletions per merged PR, from a sample of up to 500 PRs on each side of the line. It's a median, so one giant generated file or lockfile can't inflate it.
+**The merged-PR sample** is up to 500 merged PRs on each side of the line. **Lines changed** is the median of additions + deletions per PR, so one giant generated file or lockfile can't inflate it. **Time to merge** is the median hours from opening to merging. The summary also counts the distinct repos and languages in the sample. Those counts depend on the sample size, so they stay off the card.
+
+**Claude co-authored** is the share of your default-branch commits since the line that carry a `Co-Authored-By: Claude` trailer. Claude Code adds this trailer by default. Other agents don't, so their commits aren't counted here.
+
+**Merge rate** is merged PRs ÷ opened PRs, by the month each PR was opened. Recent months read a little low because some of their PRs are still open.
+
+**Reviews** counts other people's PRs you reviewed, by the month each PR was opened. **Active days** counts days with any contribution on your GitHub contribution calendar. Private work counts only if your profile shows private contributions.
+
+## What goes on the card
+
+Below the headline there's room for up to three stats, and agent-era picks them for you:
+
+1. Claude co-authored, if it's at least 10% of your commits.
+2. The stats that improved the most (commits, reviews, active days, lines per PR, time to merge), if they changed by at least 1.25×. Fewer reviews, fewer commits or slower merges never make the card. Lines per PR can go either way, because smaller PRs are a fine result too.
+3. Merge rate, if it's at least 80% and hasn't dropped.
+
+Everything else is in the summary, including your best month and how many months in a row you've beaten your pre-agent average.
 
 ## Privacy
 

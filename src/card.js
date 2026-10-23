@@ -1,4 +1,5 @@
 import { firstActiveMonth } from './era.js';
+import { pickHighlights } from './highlights.js';
 import { addMonths, lastFullMonth, laterMonth, monthRange } from './months.js';
 import { DEFAULT_THEME, mix } from './theme.js';
 
@@ -7,6 +8,7 @@ const HEIGHT = 630;
 const PAD = 60;
 const BAR_AREA = 160;
 const BAR_GAP = 3;
+const DENSE_BAR_GAP = 1;
 const MONTHS_BEFORE_ERA = 24;
 const MAX_BARS = 60;
 const FONT = `-apple-system, "Segoe UI", Helvetica, Arial, sans-serif`;
@@ -28,23 +30,27 @@ const fmt = (n) => Math.round(n).toLocaleString('en-US');
 export const multiplierPhrase = (multiplier) =>
   `${multiplier < 1 ? 'as many' : 'more'} PRs per month with AI agents`;
 
-function bars({ prs, eraStart, now }, colors) {
-  const months = monthRange(
-    laterMonth(
-      addMonths(eraStart, -MONTHS_BEFORE_ERA),
-      firstActiveMonth(prs.monthly) ?? eraStart,
-    ),
-    lastFullMonth(new Date(now)),
-  ).slice(-MAX_BARS);
+function bars({ prs, eraStart, now, chartFrom }, colors) {
+  const lastFull = lastFullMonth(new Date(now));
+  // An explicit start month gets every bar it asks for; the default is capped.
+  const months = chartFrom
+    ? monthRange(chartFrom, lastFull)
+    : monthRange(
+        laterMonth(
+          addMonths(eraStart, -MONTHS_BEFORE_ERA),
+          firstActiveMonth(prs.monthly) ?? eraStart,
+        ),
+        lastFull,
+      ).slice(-MAX_BARS);
   const max = Math.max(1, ...months.map((m) => prs.monthly[m] ?? 0));
-  const width =
-    (WIDTH - 2 * PAD - BAR_GAP * (months.length - 1)) / months.length;
+  const gap = months.length > MAX_BARS ? DENSE_BAR_GAP : BAR_GAP;
+  const width = (WIDTH - 2 * PAD - gap * (months.length - 1)) / months.length;
   const baseline = HEIGHT - PAD;
   return months
     .map((month, i) => {
       const height = Math.max(2, ((prs.monthly[month] ?? 0) / max) * BAR_AREA);
       const era = month >= eraStart;
-      return `<rect data-bar data-era="${era}" x="${(PAD + i * (width + BAR_GAP)).toFixed(1)}" y="${(baseline - height).toFixed(1)}" width="${width.toFixed(1)}" height="${height.toFixed(1)}" fill="${era ? colors.accent : colors.faint}"/>`;
+      return `<rect data-bar data-era="${era}" x="${(PAD + i * (width + gap)).toFixed(1)}" y="${(baseline - height).toFixed(1)}" width="${width.toFixed(1)}" height="${height.toFixed(1)}" fill="${era ? colors.accent : colors.faint}"/>`;
     })
     .join('');
 }
@@ -63,18 +69,13 @@ function headline({ prs }, colors) {
 <text x="${right}" y="318" font-size="14" text-anchor="end" font-family='${MONO}' fill="${colors.dim}" letter-spacing="1.5">AFTER</text>`;
 }
 
-function secondaryRow({ commits, lines }, colors) {
-  const parts = [];
-  if (commits) {
-    parts.push(
-      `commits/mo on default branches <tspan>${fmt(commits.before)}</tspan> → <tspan fill="${colors.ink}" font-weight="700">${fmt(commits.after)}</tspan>`,
-    );
-  }
-  if (lines && lines.beforeMedian !== null && lines.afterMedian !== null) {
-    parts.push(
-      `median lines per PR <tspan>${fmt(lines.beforeMedian)}</tspan> → <tspan fill="${colors.ink}" font-weight="700">${fmt(lines.afterMedian)}</tspan>`,
-    );
-  }
+function secondaryRow(stats, colors) {
+  const parts = pickHighlights(stats).map(({ label, before, after }) => {
+    const bold = `<tspan fill="${colors.ink}" font-weight="700">${after}</tspan>`;
+    return before === null
+      ? `${label} ${bold}`
+      : `${label} <tspan>${before}</tspan> → ${bold}`;
+  });
   if (parts.length === 0) return '';
   return `<text x="${PAD}" y="385" font-size="20" fill="${colors.dim}">${parts.join('   ·   ')}</text>`;
 }

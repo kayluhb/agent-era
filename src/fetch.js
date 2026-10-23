@@ -1,16 +1,29 @@
 import { currentMonth, monthEnd, monthRange } from './months.js';
 
 const MONTHS_PER_QUERY = 24;
+const WINDOW_MONTHS_PER_QUERY = 12;
+const CALENDAR_MONTHS_PER_CALL = 12;
 const PAGE_SIZE = 100;
 const ORG_BLOCKED = /SAML|SSO|HTTP 403/;
+const HOUR_MS = 3_600_000;
+export const COMMIT_SEARCH_PACE_MS = 2100;
+export const COAUTHOR_TRAILER = 'Co-Authored-By: Claude';
 
-const prCountQuery = (login, aliases) =>
-  `query { ${aliases
+const countQuery = (searches) =>
+  `query { ${searches
     .map(
-      ({ alias, from, to }) =>
-        `${alias}: search(type: ISSUE, query: "author:${login} is:pr created:${from}..${to}") { issueCount }`,
+      ({ alias, q }) =>
+        `${alias}: search(type: ISSUE, query: "${q}") { issueCount }`,
     )
     .join(' ')} }`;
+
+const prCountQuery = (login, aliases) =>
+  countQuery(
+    aliases.map(({ alias, from, to }) => ({
+      alias,
+      q: `author:${login} is:pr created:${from}..${to}`,
+    })),
+  );
 
 const counts = (data) =>
   Object.fromEntries(
@@ -73,7 +86,7 @@ export async function fetchCommitCounts(
   login,
   years,
   months,
-  { sleep, paceMs = 2100, onProgress = () => {} },
+  { sleep, paceMs = COMMIT_SEARCH_PACE_MS, onProgress = () => {} },
 ) {
   const requests = [
     ...years.map((year) => ({
@@ -101,6 +114,67 @@ export async function fetchCommitCounts(
   return result;
 }
 
+export async function fetchCoauthoredCount(gh, login, from, to) {
+  const body = await gh.rest('search/commits', {
+    q: `author:${login} "${COAUTHOR_TRAILER}" committer-date:${from}..${to}`,
+  });
+  return body.total_count;
+}
+
+// Merged PRs and reviews of other people's PRs, per month, both by PR creation date.
+export async function fetchWindowCounts(gh, login, months) {
+  const result = { merged: {}, reviewed: {} };
+  for (let i = 0; i < months.length; i += WINDOW_MONTHS_PER_QUERY) {
+    const batch = months.slice(i, i + WINDOW_MONTHS_PER_QUERY);
+    const searches = batch.flatMap((month) => {
+      const key = month.replace('-', '_');
+      const range = `${month}-01..${monthEnd(month)}`;
+      return [
+        {
+          alias: `g${key}`,
+          q: `author:${login} is:pr is:merged created:${range}`,
+        },
+        {
+          alias: `r${key}`,
+          q: `reviewed-by:${login} -author:${login} is:pr created:${range}`,
+        },
+      ];
+    });
+    const batchCounts = counts(await gh.graphql(countQuery(searches)));
+    for (const month of batch) {
+      const key = month.replace('-', '_');
+      result.merged[month] = batchCounts[`g${key}`];
+      result.reviewed[month] = batchCounts[`r${key}`];
+    }
+  }
+  return result;
+}
+
+// Days with at least one contribution, per month. One calendar covers at most a year.
+export async function fetchActiveDays(gh, months) {
+  const chunks = [];
+  for (let i = 0; i < months.length; i += CALENDAR_MONTHS_PER_CALL)
+    chunks.push(months.slice(i, i + CALENDAR_MONTHS_PER_CALL));
+  const data = await gh.graphql(
+    `query { viewer { ${chunks
+      .map(
+        (chunk, i) =>
+          `c${i}: contributionsCollection(from: "${chunk[0]}-01T00:00:00Z", to: "${monthEnd(chunk.at(-1))}T23:59:59Z") { contributionCalendar { weeks { contributionDays { date contributionCount } } } }`,
+      )
+      .join(' ')} } }`,
+  );
+  const active = Object.fromEntries(months.map((month) => [month, 0]));
+  for (const { contributionCalendar } of Object.values(data.viewer)) {
+    for (const { contributionDays } of contributionCalendar.weeks) {
+      for (const { date, contributionCount } of contributionDays) {
+        const month = date.slice(0, 7);
+        if (contributionCount > 0 && month in active) active[month]++;
+      }
+    }
+  }
+  return active;
+}
+
 // Visit indices so that any prefix of the order is spread across the whole range.
 function spreadOrder(length) {
   const order = [];
@@ -117,17 +191,23 @@ function spreadOrder(length) {
   return order;
 }
 
-export async function fetchLineSample(gh, login, months, cap = 500) {
+export async function fetchPrSample(gh, login, months, cap = 500) {
   const sample = [];
   for (const index of spreadOrder(months.length)) {
     if (sample.length >= cap) break;
     const month = months[index];
     const data = await gh.graphql(
-      `query { search(type: ISSUE, first: ${PAGE_SIZE}, query: "author:${login} is:pr is:merged created:${month}-01..${monthEnd(month)}") { nodes { ... on PullRequest { additions deletions } } } }`,
+      `query { search(type: ISSUE, first: ${PAGE_SIZE}, query: "author:${login} is:pr is:merged created:${month}-01..${monthEnd(month)}") { nodes { ... on PullRequest { additions deletions createdAt mergedAt repository { nameWithOwner primaryLanguage { name } } } } } }`,
     );
-    for (const { additions, deletions } of data.search.nodes) {
+    for (const pr of data.search.nodes) {
       if (sample.length >= cap) break;
-      sample.push(additions + deletions);
+      sample.push({
+        lines: pr.additions + pr.deletions,
+        hoursToMerge:
+          (Date.parse(pr.mergedAt) - Date.parse(pr.createdAt)) / HOUR_MS,
+        repo: pr.repository.nameWithOwner,
+        language: pr.repository.primaryLanguage?.name ?? null,
+      });
     }
   }
   return sample;

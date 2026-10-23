@@ -2,9 +2,13 @@ import { parseArgs } from 'node:util';
 import { renderCardSvg } from './card.js';
 import { beforeAfter, detectEraStart } from './era.js';
 import {
+  COMMIT_SEARCH_PACE_MS,
+  fetchActiveDays,
+  fetchCoauthoredCount,
   fetchCommitCounts,
-  fetchLineSample,
   fetchPrMonthly,
+  fetchPrSample,
+  fetchWindowCounts,
   findRestrictedOrgs,
   median,
 } from './fetch.js';
@@ -13,6 +17,7 @@ import {
   currentMonth,
   lastFullMonth,
   laterMonth,
+  monthEnd,
   monthRange,
 } from './months.js';
 import { formatSummary } from './summary.js';
@@ -22,12 +27,15 @@ const MONTH_FORMAT = /^\d{4}-(0[1-9]|1[0-2])$/;
 const LINES_AFTER_MONTHS = 12;
 
 const USAGE = `Usage: agent-era [--since YYYY-MM] [--out path.png] [--no-commits] [--no-lines] [--theme default]
+                 [--chart-from YYYY-MM]
 
   --since YYYY-MM   Month your AI-agent era started (default: detected from your PRs)
   --out PATH        Where to write the card (default: ./agent-era-<login>.png)
   --no-commits      Skip commit counts (faster)
-  --no-lines        Skip lines-changed sampling (faster)
-  --theme default   Use the default colors instead of your terminal's`;
+  --no-lines        Skip the PR sample: lines changed, time to merge, repos (faster)
+  --theme default   Use the default colors instead of your terminal's
+  --chart-from YYYY-MM
+                    Start the bar chart at this month (default: 24 months before the era)`;
 
 const GH_MESSAGES = {
   not_installed: 'agent-era needs the GitHub CLI: https://cli.github.com',
@@ -43,6 +51,7 @@ function parse(argv) {
       'no-commits': { type: 'boolean' },
       'no-lines': { type: 'boolean' },
       theme: { type: 'string' },
+      'chart-from': { type: 'string' },
       help: { type: 'boolean' },
     },
   });
@@ -57,6 +66,18 @@ async function optional(name, caveats, fn) {
     caveats.push(`Skipped ${name}: ${error.message}`);
     return null;
   }
+}
+
+const sumIn = (monthly, months) =>
+  months.reduce((sum, m) => sum + (monthly[m] ?? 0), 0);
+const distinct = (values) => new Set(values.filter(Boolean)).size;
+
+// The 12 months before the era, and the full months since.
+function windows(eraStart, now) {
+  return {
+    before: monthRange(addMonths(eraStart, -12), addMonths(eraStart, -1)),
+    after: monthRange(eraStart, lastFullMonth(now)),
+  };
 }
 
 async function commitStats(
@@ -86,26 +107,81 @@ async function commitStats(
     eraStart,
     now,
   );
-  return { before, after, multiplier, yearly: counts.yearly };
+  await sleep(COMMIT_SEARCH_PACE_MS);
+  const coauthored = await fetchCoauthoredCount(
+    gh,
+    login,
+    `${eraStart}-01`,
+    monthEnd(lastFullMonth(now)),
+  );
+  const afterTotal = sumIn(counts.monthly, windows(eraStart, now).after);
+  return {
+    before,
+    after,
+    multiplier,
+    yearly: counts.yearly,
+    coauthoredShare: afterTotal ? Math.min(1, coauthored / afterTotal) : null,
+  };
 }
 
-async function lineStats(gh, login, eraStart, now, progress) {
+function describeSample(sample) {
+  return {
+    lines: median(sample.map((pr) => pr.lines)),
+    hoursToMerge: median(sample.map((pr) => pr.hoursToMerge)),
+    repos: distinct(sample.map((pr) => pr.repo)),
+    languages: distinct(sample.map((pr) => pr.language)),
+  };
+}
+
+async function sampleStats(gh, login, eraStart, now, progress) {
   const lastFull = lastFullMonth(now);
-  progress('Sampling lines changed…');
-  const before = await fetchLineSample(
-    gh,
-    login,
-    monthRange(addMonths(eraStart, -12), addMonths(eraStart, -1)),
+  progress('Sampling merged PRs…');
+  const before = describeSample(
+    await fetchPrSample(gh, login, windows(eraStart, now).before),
   );
-  const after = await fetchLineSample(
-    gh,
-    login,
-    monthRange(
-      laterMonth(eraStart, addMonths(lastFull, 1 - LINES_AFTER_MONTHS)),
-      lastFull,
+  const after = describeSample(
+    await fetchPrSample(
+      gh,
+      login,
+      monthRange(
+        laterMonth(eraStart, addMonths(lastFull, 1 - LINES_AFTER_MONTHS)),
+        lastFull,
+      ),
     ),
   );
-  return { beforeMedian: median(before), afterMedian: median(after) };
+  return {
+    lines: { beforeMedian: before.lines, afterMedian: after.lines },
+    mergeHours: { before: before.hoursToMerge, after: after.hoursToMerge },
+    repos: { before: before.repos, after: after.repos },
+    languages: { before: before.languages, after: after.languages },
+  };
+}
+
+async function windowStats(gh, login, prMonthly, eraStart, now, progress) {
+  progress('Counting merges and reviews…');
+  const { before, after } = windows(eraStart, now);
+  const { merged, reviewed } = await fetchWindowCounts(gh, login, [
+    ...before,
+    ...after,
+  ]);
+  // Sums over the same months on both sides, so a short history can't skew it.
+  const rate = (months) => {
+    const opened = sumIn(prMonthly, months);
+    return opened ? sumIn(merged, months) / opened : null;
+  };
+  const reviews = beforeAfter(reviewed, eraStart, now);
+  return {
+    mergeRate: { before: rate(before), after: rate(after) },
+    reviews: { before: reviews.before, after: reviews.after },
+  };
+}
+
+async function activeDayStats(gh, eraStart, now, progress) {
+  progress('Counting active days…');
+  const { before, after } = windows(eraStart, now);
+  const days = await fetchActiveDays(gh, [...before, ...after]);
+  const stats = beforeAfter(days, eraStart, now);
+  return { before: stats.before, after: stats.after };
 }
 
 // Your terminal's colors with a random accent, or the default when they can't make a readable card.
@@ -148,6 +224,16 @@ export async function run({
     );
     return { exitCode: 2, outputPath: null, stats: null };
   }
+  if (
+    args['chart-from'] &&
+    (!MONTH_FORMAT.test(args['chart-from']) ||
+      args['chart-from'] > lastFullMonth(now))
+  ) {
+    log(
+      `--chart-from must be a full month before ${currentMonth(now)}, like 2016-01.`,
+    );
+    return { exitCode: 2, outputPath: null, stats: null };
+  }
   if (args.theme !== undefined && args.theme !== 'default') {
     log(`--theme only accepts "default".\n\n${USAGE}`);
     return { exitCode: 2, outputPath: null, stats: null };
@@ -170,8 +256,21 @@ export async function run({
     const prStats = beforeAfter(prs.monthly, era.month, now);
     const caveats = [];
 
-    // Commits use REST search and lines use GraphQL, so their rate limits don't collide.
-    const [commits, lines] = await Promise.all([
+    // Commits use REST search and the rest use GraphQL, so their rate limits don't collide.
+    const graphqlLane = async () => ({
+      sample: args['no-lines']
+        ? null
+        : await optional('PR sample', caveats, () =>
+            sampleStats(gh, login, era.month, now, progress),
+          ),
+      window: await optional('merge and review counts', caveats, () =>
+        windowStats(gh, login, prs.monthly, era.month, now, progress),
+      ),
+      activeDays: await optional('active days', caveats, () =>
+        activeDayStats(gh, era.month, now, progress),
+      ),
+    });
+    const [commits, { sample, window, activeDays }] = await Promise.all([
       args['no-commits']
         ? null
         : optional('commits', caveats, () =>
@@ -180,11 +279,7 @@ export async function run({
               progress,
             }),
           ),
-      args['no-lines']
-        ? null
-        : optional('lines changed', caveats, () =>
-            lineStats(gh, login, era.month, now, progress),
-          ),
+      graphqlLane(),
     ]);
     const restrictedOrgs =
       (await optional('org access check', caveats, () =>
@@ -200,6 +295,7 @@ export async function run({
       login,
       eraStart: era.month,
       eraSource: era.source,
+      chartFrom: args['chart-from'] ?? null,
       prs: {
         before: prStats.before,
         after: prStats.after,
@@ -209,7 +305,13 @@ export async function run({
         shortHistory: prStats.shortHistory,
       },
       commits,
-      lines,
+      lines: sample?.lines ?? null,
+      mergeHours: sample?.mergeHours ?? null,
+      repos: sample?.repos ?? null,
+      languages: sample?.languages ?? null,
+      mergeRate: window?.mergeRate ?? null,
+      reviews: window?.reviews ?? null,
+      activeDays,
       restrictedOrgs,
       caveats,
       colors,

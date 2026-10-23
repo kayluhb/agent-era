@@ -1,4 +1,11 @@
 import { multiplierPhrase } from './card.js';
+import {
+  hours,
+  pct,
+  peakMonth,
+  pickHighlights,
+  streakAbove,
+} from './highlights.js';
 
 const MONTH_NAMES = [
   'Jan',
@@ -19,7 +26,11 @@ const fmt = (n) => Math.round(n).toLocaleString('en-US');
 const monthLabel = (month) =>
   `${MONTH_NAMES[Number(month.slice(5)) - 1]} ${month.slice(0, 4)}`;
 
-function headlineLines({ prs, commits, lines }) {
+const bothKnown = (pair) => pair && pair.before !== null && pair.after !== null;
+
+function headlineLines(stats) {
+  const { prs, commits, lines, mergeHours, mergeRate, reviews, activeDays } =
+    stats;
   const out =
     prs.multiplier === null
       ? [
@@ -33,12 +44,54 @@ function headlineLines({ prs, commits, lines }) {
     out.push(
       `  commits on default branches: ${fmt(commits.before)} → ${fmt(commits.after)}/month`,
     );
+  if (commits?.coauthoredShare != null)
+    out.push(
+      `  commits co-authored by Claude since the agent era: ${pct(commits.coauthoredShare)}`,
+    );
   if (lines && lines.beforeMedian !== null && lines.afterMedian !== null) {
     out.push(
       `  median lines changed per merged PR: ${fmt(lines.beforeMedian)} → ${fmt(lines.afterMedian)}`,
     );
   }
+  if (bothKnown(mergeHours))
+    out.push(
+      `  median hours from open to merge: ${hours(mergeHours.before)} → ${hours(mergeHours.after)}`,
+    );
+  if (bothKnown(mergeRate))
+    out.push(
+      `  PRs merged: ${pct(mergeRate.before)} → ${pct(mergeRate.after)}`,
+    );
+  if (reviews)
+    out.push(
+      `  reviews of other people's PRs: ${fmt(reviews.before)} → ${fmt(reviews.after)}/month`,
+    );
+  if (activeDays)
+    out.push(
+      `  active days: ${fmt(activeDays.before)} → ${fmt(activeDays.after)}/month`,
+    );
   return out;
+}
+
+function factLines(stats) {
+  const out = [];
+  const peak = peakMonth(stats.prs.monthly, stats.now);
+  if (peak)
+    out.push(`Best month: ${monthLabel(peak.month)} (${fmt(peak.count)} PRs)`);
+  const streak = streakAbove(stats.prs.monthly, stats.prs.before, stats.now);
+  if (streak)
+    out.push(`${streak} months in a row above your pre-agent average`);
+  if (stats.repos)
+    out.push(
+      `Repos in the merged-PR sample: ${stats.repos.before} → ${stats.repos.after}; languages: ${stats.languages.before} → ${stats.languages.after}`,
+    );
+  return out.length ? ['', ...out] : [];
+}
+
+function cardLine(stats) {
+  const picks = pickHighlights(stats);
+  return picks.length
+    ? `On the card: ${picks.map(({ label }) => label).join(', ')}`
+    : 'On the card: PRs only';
 }
 
 function yearTable({ prs, commits }) {
@@ -75,12 +128,14 @@ export function formatSummary(stats, outputPath) {
     `agent-era for @${stats.login}`,
     '',
     ...headlineLines(stats),
+    ...factLines(stats),
     '',
     `Agent era: ${monthLabel(stats.eraStart)} (${stats.eraSource}). Move it with --since YYYY-MM.`,
     '',
     ...yearTable(stats),
     '',
     `Card: ${outputPath}`,
+    cardLine(stats),
     stats.colors
       ? `Colors: ${stats.colors.source} (accent: ${stats.colors.accentName})`
       : 'Colors: default',

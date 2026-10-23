@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  fetchActiveDays,
+  fetchCoauthoredCount,
   fetchCommitCounts,
-  fetchLineSample,
   fetchPrMonthly,
+  fetchPrSample,
+  fetchWindowCounts,
   findRestrictedOrgs,
   median,
 } from '../src/fetch.js';
 import { GhError } from '../src/gh.js';
+import { monthRange } from '../src/months.js';
 import { NOW } from './fixtures/caleb-monthly.js';
 
 const aliasesIn = (query) =>
@@ -98,17 +102,25 @@ test('fetchCommitCounts paces requests and maps total_count to keys', async () =
   assert.deepEqual(sleeps, [5, 5]);
 });
 
-test('fetchLineSample stops at the cap and only samples merged PRs', async () => {
+const pr = (additions, deletions, language = 'Go') => ({
+  additions,
+  deletions,
+  createdAt: '2025-01-01T00:00:00Z',
+  mergedAt: '2025-01-02T12:00:00Z',
+  repository: {
+    nameWithOwner: 'a/b',
+    primaryLanguage: language && { name: language },
+  },
+});
+
+test('fetchPrSample stops at the cap and only samples merged PRs', async () => {
   const queries = [];
   const gh = {
     graphql: async (query) => {
       queries.push(query);
       return {
         search: {
-          nodes: Array.from({ length: 100 }, () => ({
-            additions: 3,
-            deletions: 2,
-          })),
+          nodes: Array.from({ length: 100 }, () => pr(3, 2)),
         },
       };
     },
@@ -121,24 +133,21 @@ test('fetchLineSample stops at the cap and only samples merged PRs', async () =>
     '2025-05',
     '2025-06',
   ];
-  const sample = await fetchLineSample(gh, 'kayluhb', months, 250);
+  const sample = await fetchPrSample(gh, 'kayluhb', months, 250);
   assert.equal(sample.length, 250);
-  assert.ok(sample.every((n) => n === 5));
+  assert.ok(sample.every((p) => p.lines === 5));
   assert.equal(queries.length, 3);
   assert.ok(queries.every((q) => q.includes('is:merged')));
 });
 
-test('fetchLineSample spreads its months across the window', async () => {
+test('fetchPrSample spreads its months across the window', async () => {
   const queries = [];
   const gh = {
     graphql: async (query) => {
       queries.push(query);
       return {
         search: {
-          nodes: Array.from({ length: 100 }, () => ({
-            additions: 1,
-            deletions: 0,
-          })),
+          nodes: Array.from({ length: 100 }, () => pr(1, 0)),
         },
       };
     },
@@ -147,9 +156,117 @@ test('fetchLineSample spreads its months across the window', async () => {
     { length: 12 },
     (_, i) => `2025-${String(i + 1).padStart(2, '0')}`,
   );
-  await fetchLineSample(gh, 'kayluhb', months, 200);
+  await fetchPrSample(gh, 'kayluhb', months, 200);
   assert.ok(queries[0].includes('created:2025-01-01'));
   assert.ok(queries[1].includes('created:2025-07-01'));
+});
+
+test('fetchPrSample keeps merge time, repo and language', async () => {
+  const gh = {
+    graphql: async () => ({ search: { nodes: [pr(1, 1, null)] } }),
+  };
+  const [sample] = await fetchPrSample(gh, 'kayluhb', ['2025-01']);
+  assert.deepEqual(sample, {
+    lines: 2,
+    hoursToMerge: 36,
+    repo: 'a/b',
+    language: null,
+  });
+});
+
+test('fetchCoauthoredCount searches commits for the Claude trailer', async () => {
+  let q;
+  const gh = {
+    rest: async (_path, params) => {
+      q = params.q;
+      return { total_count: 7 };
+    },
+  };
+  assert.equal(
+    await fetchCoauthoredCount(gh, 'kayluhb', '2026-04-01', '2026-09-30'),
+    7,
+  );
+  assert.equal(
+    q,
+    'author:kayluhb "Co-Authored-By: Claude" committer-date:2026-04-01..2026-09-30',
+  );
+});
+
+test('fetchWindowCounts gets merged and reviewed counts per month', async () => {
+  const queries = [];
+  const gh = {
+    graphql: async (query) => {
+      queries.push(query);
+      return Object.fromEntries(
+        aliasesIn(query).map((alias) => [
+          alias,
+          { issueCount: alias.startsWith('g') ? 4 : 9 },
+        ]),
+      );
+    },
+  };
+  const months = monthRange('2025-01', '2026-02');
+  const { merged, reviewed } = await fetchWindowCounts(gh, 'kayluhb', months);
+  assert.equal(queries.length, 2);
+  assert.equal(aliasesIn(queries[0]).length, 24);
+  assert.equal(merged['2026-02'], 4);
+  assert.equal(reviewed['2025-01'], 9);
+  assert.ok(
+    queries[0].includes(
+      'reviewed-by:kayluhb -author:kayluhb is:pr created:2025-01-01..2025-01-31',
+    ),
+  );
+  assert.ok(
+    queries[0].includes('author:kayluhb is:pr is:merged created:2025-02-01'),
+  );
+});
+
+test('fetchActiveDays counts days with contributions, a year per calendar', async () => {
+  let query;
+  const day = (date, contributionCount) => ({ date, contributionCount });
+  const gh = {
+    graphql: async (q) => {
+      query = q;
+      return {
+        viewer: {
+          c0: {
+            contributionCalendar: {
+              weeks: [
+                {
+                  contributionDays: [
+                    day('2025-01-30', 2),
+                    day('2025-01-31', 0),
+                    day('2025-02-01', 1),
+                  ],
+                },
+              ],
+            },
+          },
+          c1: {
+            contributionCalendar: {
+              weeks: [{ contributionDays: [day('2026-01-05', 4)] }],
+            },
+          },
+        },
+      };
+    },
+  };
+  const months = monthRange('2025-01', '2026-01');
+  const active = await fetchActiveDays(gh, months);
+  assert.equal(active['2025-01'], 1);
+  assert.equal(active['2025-02'], 1);
+  assert.equal(active['2025-03'], 0);
+  assert.equal(active['2026-01'], 1);
+  assert.ok(
+    query.includes(
+      'c0: contributionsCollection(from: "2025-01-01T00:00:00Z", to: "2025-12-31T23:59:59Z")',
+    ),
+  );
+  assert.ok(
+    query.includes(
+      'c1: contributionsCollection(from: "2026-01-01T00:00:00Z", to: "2026-01-31T23:59:59Z")',
+    ),
+  );
 });
 
 test('median', () => {
