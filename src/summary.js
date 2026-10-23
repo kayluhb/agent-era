@@ -81,6 +81,9 @@ export function formatSummary(stats, outputPath) {
     ...yearTable(stats),
     '',
     `Card: ${outputPath}`,
+    stats.colors
+      ? `Colors: ${stats.colors.source} (accent: ${stats.colors.accentName})`
+      : 'Colors: default',
     ...caveatLines(stats),
   ].join('\n');
 }

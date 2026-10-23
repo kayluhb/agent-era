@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { renderCardSvg } from '../src/card.js';
+import { DEFAULT_THEME } from '../src/theme.js';
 import { calebStats } from './fixtures/caleb-stats.js';
 
 test('renders the headline card for real data', () => {
@@ -12,8 +13,6 @@ test('renders the headline card for real data', () => {
     '@kayluhb · pull requests',
     '>68<',
     '>462<',
-    '#1b1340',
-    '#e2557a',
   ]) {
     assert.ok(svg.includes(expected), `missing ${expected}`);
   }
@@ -93,4 +92,50 @@ test('bars start at the first active month for new users', () => {
     prs: { ...calebStats.prs, monthly: { '2026-08': 50, '2026-09': 50 } },
   });
   assert.equal(svg.match(/<rect[^>]*data-bar/g).length, 2);
+});
+
+const terminal = {
+  background: '#000000',
+  foreground: '#eeeeee',
+  accent: '#8ad15c',
+  accentName: 'green',
+};
+const fillsOf = (svg, pattern) =>
+  [...svg.matchAll(pattern)].map((m) => m[0].match(/fill="([^"]+)"/)[1]);
+
+test('uses the default charcoal and amber theme when given none', () => {
+  const svg = renderCardSvg(calebStats);
+  assert.match(svg, /<rect width="1200" height="630" fill="#16171a"/);
+  assert.deepEqual(
+    [...new Set(fillsOf(svg, /<rect[^>]*data-era="true"[^>]*>/g))],
+    [DEFAULT_THEME.accent],
+  );
+  assert.ok(!svg.includes('linearGradient'));
+});
+
+test('paints the card in the terminal theme', () => {
+  const svg = renderCardSvg(calebStats, terminal);
+  assert.match(svg, /<rect width="1200" height="630" fill="#000000"/);
+  // Era bars use the accent; earlier bars are 20% of the way from background to text.
+  assert.deepEqual(
+    [...new Set(fillsOf(svg, /<rect[^>]*data-era="true"[^>]*>/g))],
+    ['#8ad15c'],
+  );
+  assert.deepEqual(
+    [...new Set(fillsOf(svg, /<rect[^>]*data-era="false"[^>]*>/g))],
+    ['#303030'],
+  );
+  // The after number is in the accent; labels are halfway between background and text.
+  assert.match(svg, /fill="#8ad15c"[^>]*>462</);
+  assert.match(svg, /fill="#777777"[^>]*>BEFORE</);
+});
+
+test('draws a dot grid in the text color', () => {
+  const svg = renderCardSvg(calebStats, terminal);
+  assert.match(svg, /<pattern[^>]*>.*<circle[^>]*fill="#eeeeee"/s);
+});
+
+test('sets labels in a monospace font', () => {
+  const svg = renderCardSvg(calebStats);
+  assert.match(svg, /font-family='[^']*monospace'[^>]*>@kayluhb/);
 });

@@ -16,16 +16,18 @@ import {
   monthRange,
 } from './months.js';
 import { formatSummary } from './summary.js';
+import { DEFAULT_THEME, pickTheme } from './theme.js';
 
 const MONTH_FORMAT = /^\d{4}-(0[1-9]|1[0-2])$/;
 const LINES_AFTER_MONTHS = 12;
 
-const USAGE = `Usage: agent-era [--since YYYY-MM] [--out path.png] [--no-commits] [--no-lines]
+const USAGE = `Usage: agent-era [--since YYYY-MM] [--out path.png] [--no-commits] [--no-lines] [--theme default]
 
   --since YYYY-MM   Month your AI-agent era started (default: detected from your PRs)
   --out PATH        Where to write the card (default: ./agent-era-<login>.png)
   --no-commits      Skip commit counts (faster)
-  --no-lines        Skip lines-changed sampling (faster)`;
+  --no-lines        Skip lines-changed sampling (faster)
+  --theme default   Use the default colors instead of your terminal's`;
 
 const GH_MESSAGES = {
   not_installed: 'agent-era needs the GitHub CLI: https://cli.github.com',
@@ -40,6 +42,7 @@ function parse(argv) {
       out: { type: 'string' },
       'no-commits': { type: 'boolean' },
       'no-lines': { type: 'boolean' },
+      theme: { type: 'string' },
       help: { type: 'boolean' },
     },
   });
@@ -105,7 +108,26 @@ async function lineStats(gh, login, eraStart, now, progress) {
   return { beforeMedian: median(before), afterMedian: median(after) };
 }
 
-export async function run({ argv, gh, now, sleep, render, log, progress }) {
+// Your terminal's colors with a random accent, or the default when they can't make a readable card.
+async function cardTheme(terminalPalette, random) {
+  const found = await terminalPalette();
+  const theme = found && pickTheme(found.palette, random);
+  return theme
+    ? { theme, colors: { source: found.source, accentName: theme.accentName } }
+    : { theme: DEFAULT_THEME, colors: null };
+}
+
+export async function run({
+  argv,
+  gh,
+  now,
+  sleep,
+  render,
+  log,
+  progress,
+  terminalPalette,
+  random,
+}) {
   let args;
   try {
     args = parse(argv);
@@ -124,6 +146,10 @@ export async function run({ argv, gh, now, sleep, render, log, progress }) {
     log(
       `--since must be a full month before ${currentMonth(now)}, like 2025-06.`,
     );
+    return { exitCode: 2, outputPath: null, stats: null };
+  }
+  if (args.theme !== undefined && args.theme !== 'default') {
+    log(`--theme only accepts "default".\n\n${USAGE}`);
     return { exitCode: 2, outputPath: null, stats: null };
   }
 
@@ -165,6 +191,11 @@ export async function run({ argv, gh, now, sleep, render, log, progress }) {
         findRestrictedOrgs(gh),
       )) ?? [];
 
+    const { theme, colors } =
+      args.theme === 'default'
+        ? { theme: DEFAULT_THEME, colors: null }
+        : await cardTheme(terminalPalette, random);
+
     const stats = {
       login,
       eraStart: era.month,
@@ -181,11 +212,12 @@ export async function run({ argv, gh, now, sleep, render, log, progress }) {
       lines,
       restrictedOrgs,
       caveats,
+      colors,
       now: now.toISOString(),
     };
 
     const output = await render(
-      renderCardSvg(stats),
+      renderCardSvg(stats, theme),
       args.out ?? `agent-era-${login}.png`,
     );
     if (output.format === 'svg') {

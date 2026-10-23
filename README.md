@@ -26,7 +26,7 @@ Claude runs the script, tells you your headline number, and writes `agent-era-<y
 You can also run the script directly:
 
 ```bash
-node bin/agent-era.js [--since YYYY-MM] [--out path.png] [--no-commits] [--no-lines]
+node bin/agent-era.js [--since YYYY-MM] [--out path.png] [--no-commits] [--no-lines] [--theme default]
 ```
 
 | Flag | What it does |
@@ -35,6 +35,13 @@ node bin/agent-era.js [--since YYYY-MM] [--out path.png] [--no-commits] [--no-li
 | `--out PATH` | Where to write the card (default `./agent-era-<login>.png`) |
 | `--no-commits` | Skip commit counts (faster) |
 | `--no-lines` | Skip the lines-changed sample (faster) |
+| `--theme default` | Use the default charcoal and amber colors instead of your terminal's |
+
+## Colors
+
+The card uses your terminal's colors. agent-era reads the background and text color from your terminal's settings, and picks one accent at random from its ANSI colors, so each run can look a little different. It skips red, because a red "after" reads as bad news, and it skips any color that would be hard to read on your background.
+
+This works for iTerm2, Ghostty, kitty and Alacritty. For other terminals, or if the colors would make an unreadable card, it uses the default charcoal and amber colors. The summary says which colors it used.
 
 ## How the numbers work
 

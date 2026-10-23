@@ -60,6 +60,8 @@ function harness(overrides = {}) {
     },
     log: (msg) => logs.push(msg),
     progress: () => {},
+    terminalPalette: async () => null,
+    random: () => 0,
     ...overrides,
   };
   return { options, logs, renders };
@@ -207,4 +209,63 @@ test('the SVG fallback caveat carries the renderer reason', async () => {
       (c) => c.includes('Chrome failed (boom)') && c.includes('CHROME_PATH'),
     ),
   );
+});
+
+const itermPalette = {
+  source: 'iTerm2',
+  palette: {
+    background: '#000000',
+    foreground: '#eeeeee',
+    ansi: { 2: '#8ad15c', 4: '#7abdeb' },
+  },
+};
+
+test('paints the card in the terminal colors with a random accent', async () => {
+  const { options, renders, logs } = harness({
+    terminalPalette: async () => itermPalette,
+    random: () => 0.6,
+  });
+  const result = await run(options);
+  assert.equal(result.exitCode, 0);
+  assert.ok(renders[0].svg.includes('fill="#000000"'));
+  assert.ok(renders[0].svg.includes('fill="#7abdeb"'));
+  assert.ok(logs.join('\n').includes('Colors: iTerm2 (accent: blue)'));
+});
+
+test('falls back to the default colors when the terminal is unknown', async () => {
+  const { options, renders, logs } = harness();
+  await run(options);
+  assert.ok(renders[0].svg.includes('fill="#16171a"'));
+  assert.ok(logs.join('\n').includes('Colors: default'));
+});
+
+test('falls back to the default colors when the palette is unreadable', async () => {
+  const { options, renders, logs } = harness({
+    terminalPalette: async () => ({
+      source: 'iTerm2',
+      palette: { background: '#000000', foreground: '#111111', ansi: {} },
+    }),
+  });
+  await run(options);
+  assert.ok(renders[0].svg.includes('fill="#16171a"'));
+  assert.ok(logs.join('\n').includes('Colors: default'));
+});
+
+test('--theme default skips reading the terminal', async () => {
+  const { options, renders, logs } = harness({
+    argv: ['--theme', 'default'],
+    terminalPalette: async () => assert.fail('should not read the terminal'),
+  });
+  const result = await run(options);
+  assert.equal(result.exitCode, 0);
+  assert.ok(renders[0].svg.includes('fill="#16171a"'));
+  assert.ok(logs.join('\n').includes('Colors: default'));
+});
+
+test('rejects an unknown --theme', async () => {
+  const { options, renders, logs } = harness({ argv: ['--theme', 'neon'] });
+  const result = await run(options);
+  assert.equal(result.exitCode, 2);
+  assert.equal(renders.length, 0);
+  assert.ok(logs.join('\n').includes('--theme'));
 });
