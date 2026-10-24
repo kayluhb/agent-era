@@ -36,6 +36,7 @@ function fakeGh({
   monthly = calebMonthly,
   commitError = null,
   authError = null,
+  trailerDates = {},
 } = {}) {
   const yearTotal = (year) =>
     Object.entries(monthly)
@@ -63,6 +64,14 @@ function fakeGh({
       if (path === 'user/orgs') return [];
       if (path === 'search/commits') {
         if (commitError) throw commitError;
+        if (params.sort === 'committer-date') {
+          const agent = params.q.includes('cursoragent') ? 'Cursor' : 'Claude';
+          const dates = trailerDates[agent] ?? [];
+          return {
+            total_count: dates.length,
+            items: dates.map((date) => ({ commit: { committer: { date } } })),
+          };
+        }
         if (params.q.includes('Co-Authored-By')) return { total_count: 30 };
         if (params.q.includes('cursoragent')) return { total_count: 3 };
         return { total_count: 50 };
@@ -116,6 +125,44 @@ test('happy path renders the card from detected era', async () => {
   assert.equal(result.stats.activeDays.after, 1 / 5);
   assert.equal(renders.length, 1);
   assert.ok(logs.join('\n').includes('6.8×'));
+});
+
+const steady = (month) => [1, 2, 3].map((d) => `${month}-0${d}T12:00:00Z`);
+
+test('agent trailers set the era by default, earliest agent first', async () => {
+  const { options, logs } = harness({
+    gh: fakeGh({
+      trailerDates: { Claude: steady('2026-01'), Cursor: steady('2026-02') },
+    }),
+  });
+  const { stats } = await run(options);
+  assert.equal(stats.eraStart, '2026-01');
+  assert.equal(stats.eraSource, 'trailers');
+  assert.ok(
+    logs
+      .join('\n')
+      .includes('Agent era: Jan 2026 (first agent co-authored commits)'),
+  );
+});
+
+test('trailers only in the current month fall back to the PR jump', async () => {
+  const { options } = harness({
+    gh: fakeGh({ trailerDates: { Claude: steady('2026-10') } }),
+  });
+  const { stats } = await run(options);
+  assert.equal(stats.eraSource, 'detected');
+  assert.equal(stats.eraStart, '2026-04');
+});
+
+test('--since skips the trailer search', async () => {
+  const gh = fakeGh({ trailerDates: { Claude: steady('2026-01') } });
+  const rest = gh.rest;
+  gh.rest = async (path, params) => {
+    assert.notEqual(params?.sort, 'committer-date');
+    return rest(path, params);
+  };
+  const { options } = harness({ gh, argv: ['--since', '2025-06'] });
+  assert.equal((await run(options)).stats.eraStart, '2025-06');
 });
 
 test('--since overrides the detected era', async () => {
@@ -224,8 +271,9 @@ test('fetches commit months only for the chart and the before/after windows', as
   };
   const { options } = harness({ gh });
   await run(options);
-  // years 2022–2026 (5) + chart months 2024-04 … 2026-09 (30) + 6 era months per agent (12)
-  assert.equal(queries.length, 47);
+  // one trailer search per agent (2) + years 2022–2026 (5) + chart months 2024-04 … 2026-09 (30)
+  // + 6 era months per agent (12)
+  assert.equal(queries.length, 49);
   assert.ok(!queries.some((q) => q.includes('2024-03-01..')));
 });
 

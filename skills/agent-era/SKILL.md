@@ -15,7 +15,7 @@ Make a 1200×630 share card that compares the user's GitHub output before and af
 
    It prints progress to stderr and the summary to stdout. A heavy GitHub user takes about 3–4 minutes, and an early `--chart-from` adds about 2 seconds per extra month.
 
-2. Tell the user the headline (for example "6.8× more PRs per month"), the before → after numbers, the detected agent-era month, and where the card was written. The summary's `On the card:` line names the tiles the script picked for the card; say why each one stands out. Then pick one or two fun facts the tiles don't show, like their share of PRs opened between 6pm and 6am, or how many repos and languages their merged PRs touched. Mention any caveats the summary lists.
+2. Tell the user the headline (for example "6.8× more PRs per month"), the before → after numbers, the agent-era month and how it was picked, and where the card was written. The summary's `On the card:` line names the tiles the script picked for the card; say why each one stands out. Then pick one or two fun facts the tiles don't show, like their share of PRs opened between 6pm and 6am, or how many repos and languages their merged PRs touched. Mention any caveats the summary lists.
 
 3. If you can display images, read the PNG and show it.
 
@@ -23,6 +23,6 @@ Make a 1200×630 share card that compares the user's GitHub output before and af
 
 5. If the script says the GitHub CLI is missing or logged out, give the user the exact fix it printed (install from https://cli.github.com, or run `gh auth login`).
 
-If the detected era month looks wrong to the user, offer to rerun with `--since YYYY-MM`.
+The summary's `Agent era:` line says how the month was picked: from the first agent co-authored commits, from a jump in PRs, or Claude Code's launch as the default. Agents only leave a trace when they sign commits, so if the user says they used agents earlier, offer to rerun with `--since YYYY-MM`.
 
 The card uses the user's terminal colors with a random accent, and the summary's `Colors:` line says which. If they want a different accent, a rerun picks a new one. If they want the standard look, rerun with `--theme default`.
