@@ -124,4 +124,5 @@ If one of your orgs requires SSO and hasn't authorized the GitHub CLI, its PRs w
 npm install   # dev tools only (Biome)
 npm test
 npm run check
+npm run docs:images   # re-render the README images in docs/ (needs Chrome)
 ```
